@@ -1,0 +1,18 @@
+[package]
+name = "mendes-derive"
+version = "0.0.1"
+authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
+description = "Async Rust web framework"
+documentation = "https://docs.rs/mendes-derive"
+repository = "https://github.com/djc/mendes"
+license = "MIT OR Apache-2.0"
+workspace = ".."
+edition = "2018"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = "1"
+syn = { version = "1", features = ["full"] }
+proc-macro2 = "1"

@@ -1,0 +1,18 @@
+[package]
+name = "mendes"
+version = "0.0.1"
+authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
+description = "Async Rust web framework"
+documentation = "https://docs.rs/mendes"
+repository = "https://github.com/djc/mendes"
+license = "MIT OR Apache-2.0"
+edition = "2018"
+workspace = ".."
+
+[dependencies]
+http = "0.1"
+mendes-derive = { version = "0.0.1", path = "../mendes-derive" }
+
+[dev-dependencies]
+hyper = "0.13.0-alpha.4"
+tokio = "0.2.0-alpha.6"
