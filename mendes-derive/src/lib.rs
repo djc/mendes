@@ -35,7 +35,7 @@ pub fn dispatch(_: TokenStream, item: TokenStream) -> TokenStream {
     let block = quote!({
         let path = req.uri().path();
         let component = match path[1..].find('/') {
-            Some(pos) => &path[1..pos],
+            Some(pos) => &path[1..1 + pos],
             None => "",
         };
 
