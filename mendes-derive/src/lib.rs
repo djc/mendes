@@ -11,7 +11,7 @@ pub fn dispatch(_: TokenStream, item: TokenStream) -> TokenStream {
 
     let expr = match ast.block.stmts.get(0) {
         Some(syn::Stmt::Item(syn::Item::Macro(expr))) => &expr.mac,
-        v => panic!("did not find expression statement in block {:?}", v),
+        _ => panic!("did not find expression statement in block"),
     };
 
     if !expr.path.is_ident("route") {
@@ -104,7 +104,6 @@ pub fn dispatch(_: TokenStream, item: TokenStream) -> TokenStream {
     TokenStream::from(tokens)
 }
 
-#[derive(Debug)]
 struct Map {
     routes: Vec<Route>,
 }
@@ -125,7 +124,6 @@ impl Parse for Map {
     }
 }
 
-#[derive(Debug)]
 struct Route {
     component: syn::Pat,
     handler: syn::Expr,
