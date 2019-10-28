@@ -36,7 +36,7 @@ pub fn dispatch(_: TokenStream, item: TokenStream) -> TokenStream {
         let path = req.uri().path();
         let component = match path[1..].find('/') {
             Some(pos) => &path[1..1 + pos],
-            None => "",
+            None => &path[1..],
         };
 
         let future = match component { #route_tokens };
