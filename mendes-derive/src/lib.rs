@@ -2,7 +2,7 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use proc_macro2::{Punct, Spacing};
-use quote::{format_ident, quote, ToTokens, TokenStreamExt};
+use quote::{quote, ToTokens, TokenStreamExt};
 use syn::parse::{Parse, ParseStream};
 
 #[proc_macro_attribute]
@@ -18,17 +18,15 @@ pub fn dispatch(_: TokenStream, item: TokenStream) -> TokenStream {
         panic!("dispatch function does not call the route!() macro")
     }
 
-    let mod_name = format_ident!("{}__mod", ast.sig.ident);
     let Map { routes } = expr.parse_body().unwrap();
     let mut route_tokens = proc_macro2::TokenStream::new();
-    for (i, route) in routes.iter().enumerate() {
+    for route in routes.iter() {
         route.component.to_tokens(&mut route_tokens);
         route_tokens.append(Punct::new('=', Spacing::Joint));
         route_tokens.append(Punct::new('>', Spacing::Alone));
 
-        let variant = format_ident!("V{}", i);
         let handler = &route.handler;
-        route_tokens.append_all(quote!(#mod_name::Future::#variant(#handler(&app, req))));
+        route_tokens.append_all(quote!(#handler(&app, req).await));
         route_tokens.append(Punct::new(',', Spacing::Alone));
     }
 
@@ -39,69 +37,17 @@ pub fn dispatch(_: TokenStream, item: TokenStream) -> TokenStream {
             None => &path[1..],
         };
 
-        let future = match component { #route_tokens };
+        let result = match component { #route_tokens };
 
-        match future.await {
+        match result {
             Ok(rsp) => Ok(rsp),
             Err(e) => Ok(app.error(e)),
         }
     });
 
-    let mut type_args = proc_macro2::TokenStream::new();
-    let mut variants = proc_macro2::TokenStream::new();
-    let mut wheres = proc_macro2::TokenStream::new();
-    let mut polls = proc_macro2::TokenStream::new();
-    for i in 0..routes.len() {
-        let var = format_ident!("T{}", i);
-        type_args.append_all(quote!(#var));
-        type_args.append(Punct::new(',', Spacing::Alone));
-
-        let variant = format_ident!("V{}", i);
-        variants.append_all(quote!(#variant(#var)));
-        variants.append(Punct::new(',', Spacing::Alone));
-
-        wheres.append_all(quote!(#var:));
-        if i == 0 {
-            wheres.append_all(quote!(::std::future::Future));
-        } else {
-            wheres.append_all(quote!(::std::future::Future<Output = T0::Output>));
-        }
-        wheres.append(Punct::new(',', Spacing::Alone));
-
-        polls.append_all(quote!(
-            Future::#variant(f) => ::std::pin::Pin::new_unchecked(f).poll(cx),
-        ));
-    }
-
-    let future = quote!(pub enum Future<#type_args> { #variants });
-
-    let future_impl = quote!(
-        impl<#type_args> ::std::future::Future for Future<#type_args> where #wheres {
-            type Output = T0::Output;
-
-            fn poll(
-                self: ::std::pin::Pin<&mut Self>,
-                cx: &mut ::std::task::Context
-            ) -> ::std::task::Poll<Self::Output> {
-                unsafe {
-                    match self.get_unchecked_mut() { #polls }
-                }
-            }
-        }
-    );
-
     let block: syn::Block = syn::parse(TokenStream::from(block)).unwrap();
     ast.block = Box::new(block);
-    let mut tokens = ast.to_token_stream();
-    tokens.append_all(quote!(
-        #[allow(non_snake_case)]
-        mod #mod_name {
-            #future
-            #future_impl
-        }
-    ));
-
-    TokenStream::from(tokens)
+    TokenStream::from(ast.to_token_stream())
 }
 
 struct Map {
