@@ -28,7 +28,7 @@ pub fn dispatch(_: TokenStream, item: TokenStream) -> TokenStream {
 
         let variant = format_ident!("V{}", i);
         let handler = &route.handler;
-        route_tokens.append_all(quote!(#mod_name::Future::#variant(#handler(app, req))));
+        route_tokens.append_all(quote!(#mod_name::Future::#variant(#handler(&app, req))));
         route_tokens.append(Punct::new(',', Spacing::Alone));
     }
 

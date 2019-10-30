@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use http::{Request, Response, StatusCode};
 use hyper::Body;
 use mendes::Application;
@@ -11,12 +13,14 @@ fn basic() {
         .body(())
         .unwrap();
     let mut rt = Runtime::new().unwrap();
-    let rsp = rt.block_on(async { route(&App {}, req).await }).unwrap();
+    let rsp = rt
+        .block_on(async { route(Arc::new(App {}), req).await })
+        .unwrap();
     assert_eq!(rsp.status(), StatusCode::OK);
 }
 
 #[dispatch]
-async fn route(app: &App, req: Request<()>) -> Result<Response<Body>, Error> {
+async fn route(app: Arc<App>, req: Request<()>) -> Result<Response<Body>, Error> {
     route! {
         _ => hello,
     }
