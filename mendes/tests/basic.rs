@@ -14,13 +14,12 @@ fn basic() {
         .unwrap();
     let mut rt = Runtime::new().unwrap();
     let rsp = rt
-        .block_on(async { route(Arc::new(App {}), req).await })
-        .unwrap();
+        .block_on(async { route(Arc::new(App {}), req).await });
     assert_eq!(rsp.status(), StatusCode::OK);
 }
 
 #[dispatch]
-async fn route(app: Arc<App>, req: Request<()>) -> Result<Response<Body>, Error> {
+async fn route(app: Arc<App>, req: Request<()>) -> Response<Body> {
     route! {
         _ => hello,
     }

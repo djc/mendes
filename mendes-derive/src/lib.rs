@@ -40,8 +40,8 @@ pub fn dispatch(_: TokenStream, item: TokenStream) -> TokenStream {
         let result = match component { #route_tokens };
 
         match result {
-            Ok(rsp) => Ok(rsp),
-            Err(e) => Ok(app.error(e)),
+            Ok(rsp) => rsp,
+            Err(e) => app.error(e),
         }
     });
 
