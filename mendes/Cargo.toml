@@ -10,7 +10,7 @@ edition = "2018"
 workspace = ".."
 
 [dependencies]
-http = "0.1"
+http = "0.2"
 mendes-derive = { version = "0.0.5", path = "../mendes-derive" }
 
 [dev-dependencies]
