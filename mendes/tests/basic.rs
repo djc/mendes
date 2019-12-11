@@ -4,17 +4,14 @@ use http::{Request, Response, StatusCode};
 use hyper::Body;
 use mendes::Application;
 use mendes_derive::dispatch;
-use tokio::runtime::current_thread::Runtime;
 
-#[test]
-fn basic() {
+#[tokio::test]
+async fn basic() {
     let req = Request::builder()
         .uri("https://example.com/hello")
         .body(())
         .unwrap();
-    let mut rt = Runtime::new().unwrap();
-    let rsp = rt
-        .block_on(async { route(Arc::new(App {}), req).await });
+    let rsp = route(Arc::new(App {}), req).await;
     assert_eq!(rsp.status(), StatusCode::OK);
 }
 
