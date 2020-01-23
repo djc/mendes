@@ -1,9 +1,64 @@
 extern crate proc_macro;
 
+use std::mem;
+
 use proc_macro::TokenStream;
 use proc_macro2::{Punct, Spacing};
 use quote::{quote, ToTokens, TokenStreamExt};
 use syn::parse::{Parse, ParseStream};
+use syn::punctuated::Punctuated;
+use syn::token::Comma;
+
+#[proc_macro_attribute]
+pub fn handler(meta: TokenStream, item: TokenStream) -> TokenStream {
+    let mut ast = syn::parse::<syn::ItemFn>(item).unwrap();
+
+    let app_type = syn::parse::<AppType>(meta).unwrap().ty;
+    let new = syn::parse::<MethodArgs>(quote!(cx: Context<#app_type>).into()).unwrap();
+    let _ = mem::replace(&mut ast.sig.inputs, new.args);
+
+    let mut block = Vec::with_capacity(ast.block.stmts.len() + 1);
+    let extract = quote!(let Context { app, req, .. } = cx;);
+    block.push(syn::parse::<Statement>(extract.into()).unwrap().stmt);
+    let old = mem::replace(&mut ast.block.stmts, block);
+    ast.block.stmts.extend(old);
+
+    TokenStream::from(ast.to_token_stream())
+}
+
+struct MethodArgs {
+    args: Punctuated<syn::FnArg, Comma>,
+}
+
+impl Parse for MethodArgs {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        Ok(Self {
+            args: Punctuated::parse_terminated(input)?,
+        })
+    }
+}
+
+struct AppType {
+    ty: syn::Type,
+}
+
+impl Parse for AppType {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        Ok(Self { ty: input.parse()? })
+    }
+}
+
+struct Statement {
+    stmt: syn::Stmt,
+}
+
+impl Parse for Statement {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        Ok(Self {
+            stmt: input.parse()?,
+        })
+    }
+}
 
 #[proc_macro_attribute]
 pub fn dispatch(_: TokenStream, item: TokenStream) -> TokenStream {
@@ -26,22 +81,14 @@ pub fn dispatch(_: TokenStream, item: TokenStream) -> TokenStream {
         route_tokens.append(Punct::new('>', Spacing::Alone));
 
         let handler = &route.handler;
-        route_tokens.append_all(quote!(#handler(&app, req).await));
+        route_tokens.append_all(quote!(#handler(cx).await.unwrap_or_else(|e| app.error(e))));
         route_tokens.append(Punct::new(',', Spacing::Alone));
     }
 
     let block = quote!({
-        let path = req.uri().path();
-        let component = match path[1..].find('/') {
-            Some(pos) => &path[1..1 + pos],
-            None => &path[1..],
-        };
-
-        let result = match component { #route_tokens };
-
-        match result {
-            Ok(rsp) => rsp,
-            Err(e) => app.error(e),
+        let app = cx.app.clone();
+        match cx.path() {
+            #route_tokens
         }
     });
 

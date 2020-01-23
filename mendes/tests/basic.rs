@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use http::{Request, Response, StatusCode};
 use hyper::Body;
-use mendes::Application;
-use mendes_derive::dispatch;
+use mendes::{Application, Context};
+use mendes_derive::{dispatch, handler};
 
 #[tokio::test]
 async fn basic() {
@@ -11,17 +11,18 @@ async fn basic() {
         .uri("https://example.com/hello")
         .body(())
         .unwrap();
-    let rsp = route(Arc::new(App {}), req).await;
+    let rsp = route(Context::new(Arc::new(App {}), req)).await;
     assert_eq!(rsp.status(), StatusCode::OK);
 }
 
 #[dispatch]
-async fn route(app: Arc<App>, req: Request<()>) -> Response<Body> {
+async fn route(mut cx: Context<App>) -> Response<Body> {
     route! {
         _ => hello,
     }
 }
 
+#[handler(App)]
 async fn hello(_: &App, _: Request<()>) -> Result<Response<Body>, Error> {
     Ok(Response::builder()
         .status(StatusCode::OK)
@@ -32,6 +33,7 @@ async fn hello(_: &App, _: Request<()>) -> Result<Response<Body>, Error> {
 struct App {}
 
 impl Application for App {
+    type RequestBody = ();
     type ResponseBody = Body;
     type Error = Error;
 
