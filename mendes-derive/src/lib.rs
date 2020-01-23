@@ -19,7 +19,7 @@ pub fn handler(meta: TokenStream, item: TokenStream) -> TokenStream {
 
     let mut block = Vec::with_capacity(ast.block.stmts.len() + 1);
     let extract = quote!(let Context { app, req, .. } = cx;);
-    block.push(syn::parse::<Statement>(extract.into()).unwrap().stmt);
+    block.push(Statement::get(extract.into()));
     let old = mem::replace(&mut ast.block.stmts, block);
     ast.block.stmts.extend(old);
 
@@ -52,6 +52,12 @@ struct Statement {
     stmt: syn::Stmt,
 }
 
+impl Statement {
+    fn get(tokens: TokenStream) -> syn::Stmt {
+        syn::parse::<Statement>(tokens).unwrap().stmt
+    }
+}
+
 impl Parse for Statement {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         Ok(Self {
@@ -73,28 +79,35 @@ pub fn dispatch(_: TokenStream, item: TokenStream) -> TokenStream {
         panic!("dispatch function does not call the route!() macro")
     }
 
-    let Map { routes } = expr.parse_body().unwrap();
+    let routes = path_routes(&expr.parse_body::<Map>().unwrap().routes);
+    let block = quote!({
+        let app = cx.app.clone();
+        #routes
+    });
+
+    ast.block = Box::new(syn::parse::<syn::Block>(block.into()).unwrap());
+    TokenStream::from(ast.to_token_stream())
+}
+
+fn path_routes(routes: &[Route]) -> proc_macro2::TokenStream {
     let mut route_tokens = proc_macro2::TokenStream::new();
     for route in routes.iter() {
         route.component.to_tokens(&mut route_tokens);
         route_tokens.append(Punct::new('=', Spacing::Joint));
         route_tokens.append(Punct::new('>', Spacing::Alone));
 
-        let handler = &route.handler;
-        route_tokens.append_all(quote!(#handler(cx).await.unwrap_or_else(|e| app.error(e))));
+        let nested = match &route.target {
+            Target::Direct(expr) => quote!(#expr(cx).await.unwrap_or_else(|e| app.error(e))),
+            Target::Routes(routes) => path_routes(routes)
+        };
+
+        route_tokens.append_all(nested);
         route_tokens.append(Punct::new(',', Spacing::Alone));
     }
 
-    let block = quote!({
-        let app = cx.app.clone();
-        match cx.path() {
-            #route_tokens
-        }
-    });
-
-    let block: syn::Block = syn::parse(TokenStream::from(block)).unwrap();
-    ast.block = Box::new(block);
-    TokenStream::from(ast.to_token_stream())
+    quote!(match cx.path() {
+        #route_tokens
+    })
 }
 
 struct Map {
@@ -119,14 +132,30 @@ impl Parse for Map {
 
 struct Route {
     component: syn::Pat,
-    handler: syn::Expr,
+    target: Target,
 }
 
 impl Parse for Route {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let component = input.parse()?;
         input.parse::<syn::Token![=>]>()?;
-        let handler = input.parse()?;
-        Ok(Route { component, handler })
+        let expr = input.parse::<syn::Expr>()?;
+        let target = if let syn::Expr::Macro(mac) = &expr {
+            if mac.mac.path.is_ident("path") {
+                let Map { routes } = mac.mac.parse_body().unwrap();
+                Target::Routes(routes)
+            } else {
+                Target::Direct(expr)
+            }
+        } else {
+            Target::Direct(expr)
+        };
+
+        Ok(Route { component, target })
     }
+}
+
+enum Target {
+    Direct(syn::Expr),
+    Routes(Vec<Route>),
 }
