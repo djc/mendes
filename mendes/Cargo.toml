@@ -10,6 +10,7 @@ edition = "2018"
 workspace = ".."
 
 [dependencies]
+async-trait = "0.1"
 http = "0.2"
 hyper = "0.13"
 mendes-derive = { version = "0.0.5", path = "../mendes-derive" }
