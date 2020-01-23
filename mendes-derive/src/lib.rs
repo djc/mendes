@@ -69,7 +69,7 @@ pub fn dispatch(_: TokenStream, item: TokenStream) -> TokenStream {
         _ => panic!("did not find expression statement in block"),
     };
 
-    if !expr.path.is_ident("route") {
+    if !expr.path.is_ident("path") {
         panic!("dispatch function does not call the route!() macro")
     }
 
