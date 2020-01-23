@@ -17,7 +17,7 @@ async fn basic() {
 
 #[dispatch]
 async fn route(mut cx: Context<App>) -> Response<Body> {
-    route! {
+    path! {
         _ => hello,
     }
 }
