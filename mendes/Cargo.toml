@@ -5,9 +5,12 @@ authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
 description = "Rust web toolkit for impatient perfectionists"
 documentation = "https://docs.rs/mendes"
 repository = "https://github.com/djc/mendes"
+keywords = ["web", "http", "server", "async"]
+categories = ["asynchronous", "web-programming::http-server"]
 license = "MIT OR Apache-2.0"
 edition = "2018"
 workspace = ".."
+readme = "../README.md"
 
 [dependencies]
 async-trait = "0.1"
