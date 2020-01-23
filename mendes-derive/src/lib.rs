@@ -173,6 +173,7 @@ impl Parse for Route {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 enum Target {
     Direct(syn::Expr),
     Routes(Map),
