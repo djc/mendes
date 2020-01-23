@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use http::{Request, Response, StatusCode};
 use hyper::Body;
 use mendes::{Application, Context};
@@ -11,15 +12,11 @@ async fn basic() {
         .uri("https://example.com/hello")
         .body(())
         .unwrap();
-    let rsp = route(Context::new(Arc::new(App {}), req)).await;
-    assert_eq!(rsp.status(), StatusCode::OK);
-}
 
-#[dispatch]
-async fn route(mut cx: Context<App>) -> Response<Body> {
-    path! {
-        _ => hello,
-    }
+    let app = Arc::new(App {});
+    let cx = Context::new(app, req);
+    let rsp = App::handle(cx).await;
+    assert_eq!(rsp.status(), StatusCode::OK);
 }
 
 #[handler(App)]
@@ -32,10 +29,18 @@ async fn hello(_: &App, _: Request<()>) -> Result<Response<Body>, Error> {
 
 struct App {}
 
+#[async_trait]
 impl Application for App {
     type RequestBody = ();
     type ResponseBody = Body;
     type Error = Error;
+
+    #[dispatch]
+    async fn handle(mut cx: Context<Self>) -> Response<Body> {
+        path! {
+            _ => hello,
+        }
+    }
 
     fn error(&self, _: Error) -> Response<Body> {
         Response::builder()

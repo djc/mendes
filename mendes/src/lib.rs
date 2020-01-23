@@ -1,14 +1,18 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use http::{Request, Response, StatusCode};
 use hyper::header::LOCATION;
 use hyper::Body;
 pub use mendes_derive::{dispatch, handler};
 
-pub trait Application {
+#[async_trait]
+pub trait Application: Sized {
     type RequestBody;
     type ResponseBody;
     type Error;
+
+    async fn handle(cx: Context<Self>) -> Response<Self::ResponseBody>;
 
     fn error(&self, error: Self::Error) -> Response<Self::ResponseBody>;
 }
