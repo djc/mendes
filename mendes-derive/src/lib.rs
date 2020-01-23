@@ -70,23 +70,39 @@ impl Parse for Statement {
 pub fn dispatch(_: TokenStream, item: TokenStream) -> TokenStream {
     let mut ast: syn::ItemFn = syn::parse(item).unwrap();
 
-    let routes = match ast.block.stmts.get(0) {
+    let (block, routes) = match ast.block.stmts.get_mut(0) {
         Some(syn::Stmt::Item(syn::Item::Macro(expr))) => {
             if !expr.mac.path.is_ident("path") {
                 panic!("dispatch function does not call the path!() macro")
             } else {
-                expr.mac.parse_body::<Map>().unwrap()
+                let map = expr.mac.parse_body::<Map>().unwrap();
+                (&mut ast.block, map)
+            }
+        }
+        Some(syn::Stmt::Item(syn::Item::Fn(inner))) => {
+            if let Some(syn::Stmt::Item(syn::Item::Macro(expr))) = inner.block.stmts.get(0) {
+                if !expr.mac.path.is_ident("path") {
+                    panic!("dispatch function does not call the path!() macro")
+                } else {
+                    let map = expr.mac.parse_body::<Map>().unwrap();
+                    (&mut inner.block, map)
+                }
+            } else {
+                panic!("did not find expression statement in nested function block");
             }
         }
         _ => panic!("did not find expression statement in block"),
     };
 
-    let block = quote!({
+    let new = quote!({
         let app = cx.app.clone();
         #routes
     });
 
-    ast.block = Box::new(syn::parse::<syn::Block>(block.into()).unwrap());
+    mem::replace(
+        block,
+        Box::new(syn::parse::<syn::Block>(new.into()).unwrap()),
+    );
     TokenStream::from(ast.to_token_stream())
 }
 
