@@ -1,10 +1,32 @@
+use std::convert::Infallible;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use futures_util::future::FutureExt;
 use http::{Request, Response, StatusCode};
 use hyper::header::LOCATION;
-use hyper::Body;
+use hyper::service::{make_service_fn, service_fn};
+use hyper::{Body, Server};
 pub use mendes_derive::{dispatch, handler};
+
+pub async fn run<A>(addr: &SocketAddr, app: A) -> Result<(), hyper::Error>
+where
+    A: Application<RequestBody = Body, ResponseBody = Body> + Send + Sync + 'static,
+{
+    let app = Arc::new(app);
+    Server::bind(addr)
+        .serve(make_service_fn(move |_| {
+            let app = app.clone();
+            async {
+                Ok::<_, Infallible>(service_fn(move |req| {
+                    let cx = Context::new(app.clone(), req);
+                    A::handle(cx).map(|rsp| Ok::<_, Infallible>(rsp))
+                }))
+            }
+        }))
+        .await
+}
 
 #[async_trait]
 pub trait Application: Sized {

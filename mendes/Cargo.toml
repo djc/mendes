@@ -14,6 +14,7 @@ readme = "../README.md"
 
 [dependencies]
 async-trait = "0.1"
+futures-util = "0.3"
 http = "0.2"
 hyper = "0.13"
 mendes-derive = { version = "0.0.6", path = "../mendes-derive" }
