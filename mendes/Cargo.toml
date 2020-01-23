@@ -1,8 +1,8 @@
 [package]
 name = "mendes"
-version = "0.0.6"
+version = "0.0.7"
 authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
-description = "Async Rust web framework"
+description = "Rust web toolkit for impatient perfectionists"
 documentation = "https://docs.rs/mendes"
 repository = "https://github.com/djc/mendes"
 license = "MIT OR Apache-2.0"
@@ -13,7 +13,7 @@ workspace = ".."
 async-trait = "0.1"
 http = "0.2"
 hyper = "0.13"
-mendes-derive = { version = "0.0.5", path = "../mendes-derive" }
+mendes-derive = { version = "0.0.6", path = "../mendes-derive" }
 
 [dev-dependencies]
 tokio = { version = "0.2", features = ["macros"] }
