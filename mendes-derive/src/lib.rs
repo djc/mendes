@@ -70,16 +70,17 @@ impl Parse for Statement {
 pub fn dispatch(_: TokenStream, item: TokenStream) -> TokenStream {
     let mut ast: syn::ItemFn = syn::parse(item).unwrap();
 
-    let expr = match ast.block.stmts.get(0) {
-        Some(syn::Stmt::Item(syn::Item::Macro(expr))) => &expr.mac,
+    let routes = match ast.block.stmts.get(0) {
+        Some(syn::Stmt::Item(syn::Item::Macro(expr))) => {
+            if !expr.mac.path.is_ident("path") {
+                panic!("dispatch function does not call the path!() macro")
+            } else {
+                expr.mac.parse_body::<Map>().unwrap()
+            }
+        }
         _ => panic!("did not find expression statement in block"),
     };
 
-    if !expr.path.is_ident("path") {
-        panic!("dispatch function does not call the route!() macro")
-    }
-
-    let routes = path_routes(&expr.parse_body::<Map>().unwrap().routes);
     let block = quote!({
         let app = cx.app.clone();
         #routes
@@ -87,27 +88,6 @@ pub fn dispatch(_: TokenStream, item: TokenStream) -> TokenStream {
 
     ast.block = Box::new(syn::parse::<syn::Block>(block.into()).unwrap());
     TokenStream::from(ast.to_token_stream())
-}
-
-fn path_routes(routes: &[Route]) -> proc_macro2::TokenStream {
-    let mut route_tokens = proc_macro2::TokenStream::new();
-    for route in routes.iter() {
-        route.component.to_tokens(&mut route_tokens);
-        route_tokens.append(Punct::new('=', Spacing::Joint));
-        route_tokens.append(Punct::new('>', Spacing::Alone));
-
-        let nested = match &route.target {
-            Target::Direct(expr) => quote!(#expr(cx).await.unwrap_or_else(|e| app.error(e))),
-            Target::Routes(routes) => path_routes(routes)
-        };
-
-        route_tokens.append_all(nested);
-        route_tokens.append(Punct::new(',', Spacing::Alone));
-    }
-
-    quote!(match cx.path() {
-        #route_tokens
-    })
 }
 
 struct Map {
@@ -130,6 +110,29 @@ impl Parse for Map {
     }
 }
 
+impl quote::ToTokens for Map {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let mut route_tokens = proc_macro2::TokenStream::new();
+        for route in self.routes.iter() {
+            route.component.to_tokens(&mut route_tokens);
+            route_tokens.append(Punct::new('=', Spacing::Joint));
+            route_tokens.append(Punct::new('>', Spacing::Alone));
+
+            let nested = match &route.target {
+                Target::Direct(expr) => quote!(#expr(cx).await.unwrap_or_else(|e| app.error(e))),
+                Target::Routes(routes) => quote!(#routes),
+            };
+
+            route_tokens.append_all(nested);
+            route_tokens.append(Punct::new(',', Spacing::Alone));
+        }
+
+        tokens.extend(quote!(match cx.path() {
+            #route_tokens
+        }));
+    }
+}
+
 struct Route {
     component: syn::Pat,
     target: Target,
@@ -142,8 +145,7 @@ impl Parse for Route {
         let expr = input.parse::<syn::Expr>()?;
         let target = if let syn::Expr::Macro(mac) = &expr {
             if mac.mac.path.is_ident("path") {
-                let Map { routes } = mac.mac.parse_body().unwrap();
-                Target::Routes(routes)
+                Target::Routes(mac.mac.parse_body().unwrap())
             } else {
                 Target::Direct(expr)
             }
@@ -157,5 +159,5 @@ impl Parse for Route {
 
 enum Target {
     Direct(syn::Expr),
-    Routes(Vec<Route>),
+    Routes(Map),
 }
