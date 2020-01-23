@@ -32,9 +32,7 @@ where
 {
     pub fn new(app: Arc<A>, req: Request<A::RequestBody>) -> Context<A> {
         let path = req.uri().path();
-        let next_at = if path.is_empty() {
-            None
-        } else if path == "/" {
+        let next_at = if path.is_empty() || path == "/" {
             None
         } else if path.find('/') == Some(0) {
             Some(1)
@@ -60,7 +58,7 @@ where
         match path.find('/') {
             Some(end) => {
                 self.next_at = Some(start + end + 1);
-                return Some(&path[..end]);
+                Some(&path[..end])
             }
             None => {
                 self.next_at = None;
