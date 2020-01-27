@@ -21,7 +21,7 @@ where
             async {
                 Ok::<_, Infallible>(service_fn(move |req| {
                     let cx = Context::new(app.clone(), req);
-                    A::handle(cx).map(|rsp| Ok::<_, Infallible>(rsp))
+                    A::handle(cx).map(Ok::<_, Infallible>)
                 }))
             }
         }))
