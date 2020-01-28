@@ -1,9 +1,9 @@
 [package]
-name = "mendes-derive"
+name = "mendes-macros"
 version = "0.0.6"
 authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
 description = "Macros for mendes web toolkit"
-documentation = "https://docs.rs/mendes-derive"
+documentation = "https://docs.rs/mendes-macros"
 repository = "https://github.com/djc/mendes"
 license = "MIT OR Apache-2.0"
 workspace = ".."

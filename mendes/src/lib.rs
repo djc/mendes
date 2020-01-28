@@ -9,7 +9,7 @@ use http::{Request, Response, StatusCode};
 use hyper::header::LOCATION;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Server};
-pub use mendes_derive::{dispatch, handler};
+pub use mendes_macros::{dispatch, handler};
 
 pub async fn run<A>(addr: &SocketAddr, app: A) -> Result<(), hyper::Error>
 where

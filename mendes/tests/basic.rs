@@ -3,8 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use http::{Request, Response, StatusCode};
 use hyper::Body;
-use mendes::{Application, ClientError, Context};
-use mendes_derive::{dispatch, handler};
+use mendes::{dispatch, handler, Application, ClientError, Context};
 
 #[tokio::test]
 async fn basic() {
