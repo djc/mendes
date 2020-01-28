@@ -13,7 +13,7 @@ It aims to be:
 * Async: async/await from the start
 * Low boilerplate: easy to get started, but with limited "magic"
 * Type-safe: leverage the type system to make error handling low effort
-* Secure: provide high-grade security by default
+* Secure: provide security by default; no unsafe code in this project
 * Run on stable Rust (no promises on MSRV though)
 
 Mendes is currently in an extremely early phase and probably not ready for anything
