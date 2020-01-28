@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 use std::convert::Infallible;
-use std::fmt;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::{fmt, str};
 
 use async_trait::async_trait;
 use futures_util::future::FutureExt;
+use http::header::{HeaderMap, HeaderValue};
 use http::{Request, Response, StatusCode};
-use http::header::{HeaderMap, HeaderName, HeaderValue};
 use httparse;
 use hyper::header::LOCATION;
 use hyper::service::{make_service_fn, service_fn};
@@ -98,7 +98,7 @@ where
 pub fn multipart_form_data<'b, 'r>(
     headers: &'r HeaderMap<HeaderValue>,
     body: &'b [u8],
-) -> HashMap<String, (HashMap<String, String>, &'b [u8])> {
+) -> HashMap<&'b str, (HashMap<&'b str, &'b str>, &'b [u8])> {
     let ctype = headers.get("content-type").unwrap().as_bytes();
     let split = find_bytes(ctype, b"; boundary=").unwrap();
     let value = &ctype[split + 11..];
@@ -112,25 +112,24 @@ pub fn multipart_form_data<'b, 'r>(
         haystack = &body[offset..];
     }
 
+    let mut headers: HashMap<String, &'b str> = HashMap::new();
     let mut part_data = HashMap::new();
     for part in parts {
-        let mut headers = [httparse::EMPTY_HEADER; 4];
-        let (len, headers) = match httparse::parse_headers(part, &mut headers).unwrap() {
+        let mut header_buf = [httparse::EMPTY_HEADER; 4];
+        let (len, parsed) = match httparse::parse_headers(part, &mut header_buf).unwrap() {
             httparse::Status::Complete((len, headers)) => (len, headers),
             _ => panic!("expected complete headers"),
         };
         let body = &part[len..];
 
-        let mut map = HeaderMap::new();
-        for header in headers {
+        headers.clear();
+        for header in parsed {
             let name = header.name.to_string().to_ascii_lowercase();
-            let name = HeaderName::from_lowercase(name.as_bytes()).unwrap();
-            let value = HeaderValue::from_bytes(header.value).unwrap();
-            map.insert(name, value);
+            headers.insert(name, str::from_utf8(header.value).unwrap());
         }
 
         let mut meta = HashMap::new();
-        let disposition = map.get("content-disposition").unwrap().to_str().unwrap();
+        let disposition = headers.get("content-disposition").unwrap();
         for (i, val) in disposition.split(';').enumerate() {
             if i == 0 {
                 assert_eq!(val.trim(), "form-data");
@@ -140,15 +139,12 @@ pub fn multipart_form_data<'b, 'r>(
             let mut parts = val.splitn(2, '=');
             let key = parts.next().unwrap().trim();
             let value = parts.next().unwrap().trim_matches('"');
-            meta.insert(key.to_string(), value.to_string());
+            meta.insert(key, value);
         }
 
         let name = meta.remove("name").unwrap();
         if name == "file" {
-            meta.insert(
-                "type".into(),
-                map.get("content-type").unwrap().to_str().unwrap().into(),
-            );
+            meta.insert("type", headers.get("content-type").unwrap());
         }
         part_data.insert(name, (meta, body));
     }
