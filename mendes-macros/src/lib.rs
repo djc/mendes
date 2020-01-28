@@ -129,6 +129,7 @@ impl Parse for Map {
 impl quote::ToTokens for Map {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let mut route_tokens = proc_macro2::TokenStream::new();
+        let mut wildcard = false;
         for route in self.routes.iter() {
             route.component.to_tokens(&mut route_tokens);
             route_tokens.append(Punct::new('=', Spacing::Joint));
@@ -141,6 +142,16 @@ impl quote::ToTokens for Map {
 
             route_tokens.append_all(nested);
             route_tokens.append(Punct::new(',', Spacing::Alone));
+
+            if let syn::Pat::Wild(_) = route.component {
+                wildcard = true;
+            }
+        }
+
+        if !wildcard {
+            route_tokens.extend(quote!(
+                _ => app.error(::mendes::ClientError::NotFound.into()),
+            ));
         }
 
         tokens.extend(quote!(match cx.path() {
