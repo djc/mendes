@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use http::{Request, Response, StatusCode};
 use hyper::Body;
-use mendes::{Application, Context};
+use mendes::{Application, ClientError, Context};
 use mendes_derive::{dispatch, handler};
 
 #[tokio::test]
@@ -51,4 +51,12 @@ impl Application for App {
 }
 
 #[derive(Debug)]
-enum Error {}
+enum Error {
+    Default,
+}
+
+impl From<ClientError> for Error {
+    fn from(_: ClientError) -> Self {
+        Error::Default
+    }
+}
