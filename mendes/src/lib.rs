@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::fmt;
 use std::net::SocketAddr;
@@ -6,10 +7,13 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use futures_util::future::FutureExt;
 use http::{Request, Response, StatusCode};
+use http::header::{HeaderMap, HeaderName, HeaderValue};
+use httparse;
 use hyper::header::LOCATION;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Server};
 pub use mendes_macros::{dispatch, handler};
+use twoway::find_bytes;
 
 pub async fn run<A>(addr: &SocketAddr, app: A) -> Result<(), hyper::Error>
 where
@@ -89,6 +93,67 @@ where
             }
         }
     }
+}
+
+pub fn multipart_form_data<'b, 'r>(
+    headers: &'r HeaderMap<HeaderValue>,
+    body: &'b [u8],
+) -> HashMap<String, (HashMap<String, String>, &'b [u8])> {
+    let ctype = headers.get("content-type").unwrap().as_bytes();
+    let split = find_bytes(ctype, b"; boundary=").unwrap();
+    let value = &ctype[split + 11..];
+
+    let mut offset = value.len() + 4;
+    let mut haystack = &body[offset..];
+    let mut parts = Vec::new();
+    while let Some(pos) = find_bytes(haystack, value) {
+        parts.push(&body[offset..offset + pos - 4]);
+        offset += pos + value.len() + 2;
+        haystack = &body[offset..];
+    }
+
+    let mut part_data = HashMap::new();
+    for part in parts {
+        let mut headers = [httparse::EMPTY_HEADER; 4];
+        let (len, headers) = match httparse::parse_headers(part, &mut headers).unwrap() {
+            httparse::Status::Complete((len, headers)) => (len, headers),
+            _ => panic!("expected complete headers"),
+        };
+        let body = &part[len..];
+
+        let mut map = HeaderMap::new();
+        for header in headers {
+            let name = header.name.to_string().to_ascii_lowercase();
+            let name = HeaderName::from_lowercase(name.as_bytes()).unwrap();
+            let value = HeaderValue::from_bytes(header.value).unwrap();
+            map.insert(name, value);
+        }
+
+        let mut meta = HashMap::new();
+        let disposition = map.get("content-disposition").unwrap().to_str().unwrap();
+        for (i, val) in disposition.split(';').enumerate() {
+            if i == 0 {
+                assert_eq!(val.trim(), "form-data");
+                continue;
+            }
+
+            let mut parts = val.splitn(2, '=');
+            let key = parts.next().unwrap().trim();
+            let value = parts.next().unwrap().trim_matches('"');
+            meta.insert(key.to_string(), value.to_string());
+        }
+
+        let name = meta.remove("name").unwrap();
+        if name == "file" {
+            meta.insert(
+                "type".into(),
+                map.get("content-type").unwrap().to_str().unwrap().into(),
+            );
+        }
+        part_data.insert(name, (meta, body));
+    }
+
+    part_data
 }
 
 pub fn redirect(status: StatusCode, path: &str) -> Response<Body> {
