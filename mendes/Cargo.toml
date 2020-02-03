@@ -1,6 +1,6 @@
 [package]
 name = "mendes"
-version = "0.0.9"
+version = "0.0.10"
 authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
 description = "Rust web toolkit for impatient perfectionists"
 documentation = "https://docs.rs/mendes"
@@ -18,7 +18,7 @@ futures-util = "0.3"
 http = "0.2"
 httparse = "1.3.4"
 hyper = "0.13"
-mendes-macros = { version = "0.0.7", path = "../mendes-macros" }
+mendes-macros = { version = "0.0.8", path = "../mendes-macros" }
 twoway = "0.2"
 
 [dev-dependencies]
