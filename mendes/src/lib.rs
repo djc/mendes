@@ -50,7 +50,7 @@ where
 {
     pub app: Arc<A>,
     pub req: Request<A::RequestBody>,
-    next_at: Option<usize>,
+    pub path: PathState,
 }
 
 impl<A> Context<A>
@@ -58,40 +58,79 @@ where
     A: Application,
 {
     pub fn new(app: Arc<A>, req: Request<A::RequestBody>) -> Context<A> {
-        let path = req.uri().path();
-        let next_at = if path.is_empty() || path == "/" {
+        let path = PathState::new(req.uri().path());
+        Context { app, req, path }
+    }
+
+    pub fn path(&mut self) -> Option<&str> {
+        self.path.next(&self.req)
+    }
+
+    pub fn rewind(mut self) -> Self {
+        self.path.rewind();
+        self
+    }
+}
+
+pub struct PathState {
+    prev: Option<usize>,
+    next: Option<usize>,
+}
+
+impl PathState {
+    fn new(path: &str) -> Self {
+        let next = if path.is_empty() || path == "/" {
             None
         } else if path.find('/') == Some(0) {
             Some(1)
         } else {
             Some(0)
         };
-
-        Context { app, req, next_at }
+        Self { prev: None, next }
     }
 
-    pub fn path(&mut self) -> Option<&str> {
-        let start = match self.next_at.as_ref() {
+    pub fn next<'r, B>(&mut self, req: &'r Request<B>) -> Option<&'r str> {
+        let start = match self.next.as_ref() {
             Some(v) => *v,
             None => return None,
         };
 
-        let path = &self.req.uri().path()[start..];
+        let path = &req.uri().path()[start..];
         if path.is_empty() {
-            self.next_at = None;
+            self.prev = self.next.take();
             return None;
         }
 
         match path.find('/') {
             Some(end) => {
-                self.next_at = Some(start + end + 1);
+                self.prev = self.next.replace(start + end + 1);
                 Some(&path[..end])
             }
             None => {
-                self.next_at = None;
+                self.prev = self.next.take();
                 Some(path)
             }
         }
+    }
+
+    pub fn rest<'r, B>(&mut self, req: &'r Request<B>) -> Option<&'r str> {
+        let start = match self.next.as_ref() {
+            Some(v) => *v,
+            None => return None,
+        };
+
+        let path = &req.uri().path()[start..];
+        if path.is_empty() {
+            self.prev = self.next.take();
+            None
+        } else {
+            self.prev = self.next.replace(start + path.len());
+            Some(&path[..])
+        }
+    }
+
+    fn rewind(&mut self) {
+        self.next = self.prev.take();
     }
 }
 

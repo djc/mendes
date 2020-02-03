@@ -3,7 +3,7 @@ extern crate proc_macro;
 use std::mem;
 
 use proc_macro::TokenStream;
-use proc_macro2::{Punct, Spacing};
+use proc_macro2::{Ident, Punct, Spacing, Span};
 use quote::{quote, ToTokens, TokenStreamExt};
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
@@ -15,14 +15,112 @@ pub fn handler(meta: TokenStream, item: TokenStream) -> TokenStream {
 
     let app_type = syn::parse::<AppType>(meta).unwrap().ty;
     let new = syn::parse::<MethodArgs>(quote!(cx: Context<#app_type>).into()).unwrap();
-    let _ = mem::replace(&mut ast.sig.inputs, new.args);
+    let old = mem::replace(&mut ast.sig.inputs, new.args);
 
-    let mut block = Vec::with_capacity(ast.block.stmts.len() + 1);
-    let extract = quote!(let Context { app, req, .. } = cx;);
-    block.push(Statement::get(extract.into()));
+    let (mut app, mut req, mut rest, mut complete) = ("__app", "__req", vec![], false);
+    for arg in old {
+        if complete {
+            panic!("more arguments after #[raw] not allowed");
+        }
+
+        let ty = match &arg {
+            syn::FnArg::Typed(ty) => ty,
+            _ => panic!("did not expect receiver argument in handler"),
+        };
+
+        if let Some(attr) = ty.attrs.first() {
+            if attr.path.is_ident("raw") {
+                complete = true;
+                continue;
+            }
+        }
+
+        use syn::Pat::*;
+        match ty.pat.as_ref() {
+            Ident(id) => {
+                if id.ident == "app" {
+                    app = "app";
+                } else if id.ident == "application" {
+                    app = "application";
+                } else if id.ident == "req" {
+                    req = "req";
+                } else if id.ident == "request" {
+                    req = "request";
+                } else {
+                    rest.push(arg);
+                }
+            }
+            Wild(_) => continue,
+            _ => {
+                rest.push(arg);
+            }
+        }
+    }
+
+    let mut block = Vec::with_capacity(ast.block.stmts.len() + rest.len() + 6);
+    block.push(Statement::get(
+        quote!(
+            let Context { app, req, path } = cx;
+        )
+        .into(),
+    ));
+
+    let app_name = Ident::new(app, Span::call_site());
+    block.push(Statement::get(quote!(let #app_name = app;).into()));
+    let req_name = Ident::new(req, Span::call_site());
+    block.push(Statement::get(quote!(let #req_name = req;).into()));
+    block.push(Statement::get(quote!(let mut __path = path;).into()));
+
+    for arg in rest {
+        let typed = match &arg {
+            syn::FnArg::Typed(typed) => typed,
+            _ => panic!("did not expect receiver argument in handler"),
+        };
+
+        let pat = &typed.pat;
+        if let Some(attr) = typed.attrs.first() {
+            if attr.path.is_ident("rest") {
+                block.push(Statement::get(
+                    quote!(
+                        let #pat = __path.rest(&#req_name)
+                            .ok_or(::mendes::ClientError::NotFound)?;
+                    )
+                    .into(),
+                ));
+                break;
+            }
+        }
+
+        let ty = &typed.ty;
+        // Handle &str arguments
+        if let syn::Type::Reference(type_ref) = ty.as_ref() {
+            if let syn::Type::Path(path) = type_ref.elem.as_ref() {
+                if path.qself.is_none() && path.path.is_ident("str") {
+                    block.push(Statement::get(
+                        quote!(
+                            let #pat: #ty = __path.next(&#req_name)
+                                .ok_or(::mendes::ClientError::NotFound)?;
+                        )
+                        .into(),
+                    ));
+                    continue;
+                }
+            }
+        }
+
+        block.push(Statement::get(
+            quote!(
+                let #pat: #ty = __path.next(&#req_name)
+                    .ok_or(::mendes::ClientError::NotFound)?
+                    .parse()
+                    .map_err(|_| ::mendes::ClientError::NotFound)?;
+            )
+            .into(),
+        ));
+    }
+
     let old = mem::replace(&mut ast.block.stmts, block);
     ast.block.stmts.extend(old);
-
     TokenStream::from(ast.to_token_stream())
 }
 
@@ -131,6 +229,12 @@ impl quote::ToTokens for Map {
         let mut route_tokens = proc_macro2::TokenStream::new();
         let mut wildcard = false;
         for route in self.routes.iter() {
+            let mut rewind = false;
+            if let syn::Pat::Wild(_) = route.component {
+                wildcard = true;
+                rewind = true;
+            }
+
             route.component.to_tokens(&mut route_tokens);
             route_tokens.append(Punct::new('=', Spacing::Joint));
             route_tokens.append(Punct::new('>', Spacing::Alone));
@@ -140,12 +244,12 @@ impl quote::ToTokens for Map {
                 Target::Routes(routes) => quote!(#routes),
             };
 
-            route_tokens.append_all(nested);
-            route_tokens.append(Punct::new(',', Spacing::Alone));
-
-            if let syn::Pat::Wild(_) = route.component {
-                wildcard = true;
+            if rewind {
+                route_tokens.append_all(quote!({ let mut cx = cx.rewind(); #nested }));
+            } else {
+                route_tokens.append_all(nested);
             }
+            route_tokens.append(Punct::new(',', Spacing::Alone));
         }
 
         if !wildcard {
