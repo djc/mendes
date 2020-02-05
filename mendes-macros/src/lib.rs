@@ -82,8 +82,7 @@ pub fn handler(meta: TokenStream, item: TokenStream) -> TokenStream {
             if attr.path.is_ident("rest") {
                 block.push(Statement::get(
                     quote!(
-                        let #pat = __path.rest(&#req_name)
-                            .ok_or(::mendes::ClientError::NotFound)?;
+                        let #pat = __path.rest(&#req_name);
                     )
                     .into(),
                 ));

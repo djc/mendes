@@ -113,20 +113,14 @@ impl PathState {
         }
     }
 
-    pub fn rest<'r, B>(&mut self, req: &'r Request<B>) -> Option<&'r str> {
-        let start = match self.next.as_ref() {
-            Some(v) => *v,
-            None => return None,
+    pub fn rest<'r, B>(&mut self, req: &'r Request<B>) -> &'r str {
+        let start = match self.next.take() {
+            Some(v) => v,
+            None => return "",
         };
 
-        let path = &req.uri().path()[start..];
-        if path.is_empty() {
-            self.prev = self.next.take();
-            None
-        } else {
-            self.prev = self.next.replace(start + path.len());
-            Some(&path[..])
-        }
+        self.prev = Some(start);
+        &req.uri().path()[start..]
     }
 
     fn rewind(&mut self) {
