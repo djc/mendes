@@ -11,19 +11,14 @@ async fn basic() {
         .uri("https://example.com/hello")
         .body(())
         .unwrap();
-
-    let app = Arc::new(App {});
-    let cx = Context::new(app, req);
-    let rsp = App::handle(cx).await;
+    let rsp = handle(req).await;
     assert_eq!(rsp.status(), StatusCode::OK);
 }
 
-#[handler(App)]
-async fn hello(_: &App, _: Request<()>) -> Result<Response<Body>, Error> {
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .body("Hello, world".into())
-        .unwrap())
+async fn handle(req: Request<()>) -> Response<Body> {
+    let app = Arc::new(App {});
+    let cx = Context::new(app, req);
+    App::handle(cx).await
 }
 
 struct App {}
@@ -47,6 +42,14 @@ impl Application for App {
             .body("ERROR".into())
             .unwrap()
     }
+}
+
+#[handler(App)]
+async fn hello(_: &App, _: Request<()>) -> Result<Response<Body>, Error> {
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .body("Hello, world".into())
+        .unwrap())
 }
 
 #[derive(Debug)]
