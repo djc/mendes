@@ -8,11 +8,7 @@ use mendes::{dispatch, handler, Application, ClientError, Context};
 
 #[tokio::test]
 async fn test_nested_rest() {
-    let req = Request::builder()
-        .uri("https://example.com/nested/some/more")
-        .body(())
-        .unwrap();
-    let rsp = handle(req).await;
+    let rsp = handle(path_request("/nested/some/more")).await;
     assert_eq!(rsp.status(), StatusCode::OK);
     assert_eq!(
         &to_bytes(rsp.into_body()).await.unwrap(),
@@ -22,11 +18,7 @@ async fn test_nested_rest() {
 
 #[tokio::test]
 async fn test_nested_right() {
-    let req = Request::builder()
-        .uri("https://example.com/nested/right/2018")
-        .body(())
-        .unwrap();
-    let rsp = handle(req).await;
+    let rsp = handle(path_request("/nested/right/2018")).await;
     assert_eq!(rsp.status(), StatusCode::OK);
     assert_eq!(
         &to_bytes(rsp.into_body()).await.unwrap(),
@@ -36,11 +28,7 @@ async fn test_nested_right() {
 
 #[tokio::test]
 async fn test_numbered_invalid() {
-    let req = Request::builder()
-        .uri("https://example.com/numbered/Foo")
-        .body(())
-        .unwrap();
-    let rsp = handle(req).await;
+    let rsp = handle(path_request("/numbered/Foo")).await;
     assert_eq!(rsp.status(), StatusCode::NOT_FOUND);
     assert_eq!(
         &to_bytes(rsp.into_body()).await.unwrap(),
@@ -50,22 +38,14 @@ async fn test_numbered_invalid() {
 
 #[tokio::test]
 async fn test_numbered() {
-    let req = Request::builder()
-        .uri("https://example.com/numbered/2016")
-        .body(())
-        .unwrap();
-    let rsp = handle(req).await;
+    let rsp = handle(path_request("/numbered/2016")).await;
     assert_eq!(rsp.status(), StatusCode::OK);
     assert_eq!(&to_bytes(rsp.into_body()).await.unwrap(), &b"ID = 2016"[..]);
 }
 
 #[tokio::test]
 async fn test_named() {
-    let req = Request::builder()
-        .uri("https://example.com/named/Foo")
-        .body(())
-        .unwrap();
-    let rsp = handle(req).await;
+    let rsp = handle(path_request("/named/Foo")).await;
     assert_eq!(rsp.status(), StatusCode::OK);
     assert_eq!(
         &to_bytes(rsp.into_body()).await.unwrap(),
@@ -75,11 +55,7 @@ async fn test_named() {
 
 #[tokio::test]
 async fn test_named_no_arg() {
-    let req = Request::builder()
-        .uri("https://example.com/named")
-        .body(())
-        .unwrap();
-    let rsp = handle(req).await;
+    let rsp = handle(path_request("/named")).await;
     assert_eq!(rsp.status(), StatusCode::NOT_FOUND);
     assert_eq!(
         &to_bytes(rsp.into_body()).await.unwrap(),
@@ -89,11 +65,7 @@ async fn test_named_no_arg() {
 
 #[tokio::test]
 async fn test_magic_404() {
-    let req = Request::builder()
-        .uri("https://example.com/foo")
-        .body(())
-        .unwrap();
-    let rsp = handle(req).await;
+    let rsp = handle(path_request("/foo")).await;
     assert_eq!(rsp.status(), StatusCode::NOT_FOUND);
     assert_eq!(
         &to_bytes(rsp.into_body()).await.unwrap(),
@@ -103,12 +75,15 @@ async fn test_magic_404() {
 
 #[tokio::test]
 async fn basic() {
-    let req = Request::builder()
-        .uri("https://example.com/hello")
-        .body(())
-        .unwrap();
-    let rsp = handle(req).await;
+    let rsp = handle(path_request("/hello")).await;
     assert_eq!(rsp.status(), StatusCode::OK);
+}
+
+fn path_request(path: &str) -> Request<()> {
+    Request::builder()
+        .uri(format!("https://example.com{}", path))
+        .body(())
+        .unwrap()
 }
 
 async fn handle(req: Request<()>) -> Response<Body> {
