@@ -32,6 +32,20 @@ async fn test_named() {
 }
 
 #[tokio::test]
+async fn test_named_no_arg() {
+    let req = Request::builder()
+        .uri("https://example.com/named")
+        .body(())
+        .unwrap();
+    let rsp = handle(req).await;
+    assert_eq!(rsp.status(), StatusCode::NOT_FOUND);
+    assert_eq!(
+        &to_bytes(rsp.into_body()).await.unwrap(),
+        &b"404 Not Found"[..]
+    );
+}
+
+#[tokio::test]
 async fn basic() {
     let req = Request::builder()
         .uri("https://example.com/hello")
@@ -64,10 +78,14 @@ impl Application for App {
         }
     }
 
-    fn error(&self, _: Error) -> Response<Body> {
+    fn error(&self, err: Error) -> Response<Body> {
+        let err = match err {
+            Error::Client(err) => err,
+        };
+
         Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body("ERROR".into())
+            .status(StatusCode::from(err))
+            .body(err.to_string().into())
             .unwrap()
     }
 }
@@ -98,11 +116,11 @@ async fn hello() -> Result<Response<Body>, Error> {
 
 #[derive(Debug)]
 enum Error {
-    Default,
+    Client(ClientError),
 }
 
 impl From<ClientError> for Error {
-    fn from(_: ClientError) -> Self {
-        Error::Default
+    fn from(e: ClientError) -> Self {
+        Error::Client(e)
     }
 }
