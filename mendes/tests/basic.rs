@@ -60,6 +60,20 @@ async fn test_named_no_arg() {
 }
 
 #[tokio::test]
+async fn test_magic_404() {
+    let req = Request::builder()
+        .uri("https://example.com/foo")
+        .body(())
+        .unwrap();
+    let rsp = handle(req).await;
+    assert_eq!(rsp.status(), StatusCode::NOT_FOUND);
+    assert_eq!(
+        &to_bytes(rsp.into_body()).await.unwrap(),
+        &b"404 Not Found"[..]
+    );
+}
+
+#[tokio::test]
 async fn basic() {
     let req = Request::builder()
         .uri("https://example.com/hello")
