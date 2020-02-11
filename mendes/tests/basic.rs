@@ -2,8 +2,23 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use http::{Request, Response, StatusCode};
+use hyper::body::to_bytes;
 use hyper::Body;
 use mendes::{dispatch, handler, Application, ClientError, Context};
+
+#[tokio::test]
+async fn test_named() {
+    let req = Request::builder()
+        .uri("https://example.com/named/Foo")
+        .body(())
+        .unwrap();
+    let rsp = handle(req).await;
+    assert_eq!(rsp.status(), StatusCode::OK);
+    assert_eq!(
+        &to_bytes(rsp.into_body()).await.unwrap(),
+        &b"Hello, Foo"[..]
+    );
+}
 
 #[tokio::test]
 async fn basic() {
@@ -33,6 +48,7 @@ impl Application for App {
     async fn handle(mut cx: Context<Self>) -> Response<Body> {
         path! {
             Some("hello") => hello,
+            Some("named") => named,
         }
     }
 
@@ -42,6 +58,14 @@ impl Application for App {
             .body("ERROR".into())
             .unwrap()
     }
+}
+
+#[handler(App)]
+async fn named(name: &str) -> Result<Response<Body>, Error> {
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .body(format!("Hello, {}", name).into())
+        .unwrap())
 }
 
 #[handler(App)]
