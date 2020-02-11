@@ -114,10 +114,7 @@ impl Application for App {
     }
 
     fn error(&self, err: Error) -> Response<Body> {
-        let err = match err {
-            Error::Client(err) => err,
-        };
-
+        let Error::Client(err) = err;
         Response::builder()
             .status(StatusCode::from(err))
             .body(err.to_string().into())
