@@ -45,7 +45,7 @@ impl Application for App {
 }
 
 #[handler(App)]
-async fn hello(_: &App, _: Request<()>) -> Result<Response<Body>, Error> {
+async fn hello() -> Result<Response<Body>, Error> {
     Ok(Response::builder()
         .status(StatusCode::OK)
         .body("Hello, world".into())
