@@ -32,7 +32,7 @@ impl Application for App {
     #[dispatch]
     async fn handle(mut cx: Context<Self>) -> Response<Body> {
         path! {
-            _ => hello,
+            Some("hello") => hello,
         }
     }
 
