@@ -7,6 +7,34 @@ use hyper::Body;
 use mendes::{dispatch, handler, Application, ClientError, Context};
 
 #[tokio::test]
+async fn test_nested_rest() {
+    let req = Request::builder()
+        .uri("https://example.com/nested/some/more")
+        .body(())
+        .unwrap();
+    let rsp = handle(req).await;
+    assert_eq!(rsp.status(), StatusCode::OK);
+    assert_eq!(
+        &to_bytes(rsp.into_body()).await.unwrap(),
+        &b"nested rest some/more"[..]
+    );
+}
+
+#[tokio::test]
+async fn test_nested_right() {
+    let req = Request::builder()
+        .uri("https://example.com/nested/right/2018")
+        .body(())
+        .unwrap();
+    let rsp = handle(req).await;
+    assert_eq!(rsp.status(), StatusCode::OK);
+    assert_eq!(
+        &to_bytes(rsp.into_body()).await.unwrap(),
+        &b"nested right 2018"[..]
+    );
+}
+
+#[tokio::test]
 async fn test_numbered_invalid() {
     let req = Request::builder()
         .uri("https://example.com/numbered/Foo")
@@ -103,6 +131,10 @@ impl Application for App {
             Some("hello") => hello,
             Some("named") => named,
             Some("numbered") => numbered,
+            Some("nested") => path! {
+                Some("right") => nested_right,
+                _ => nested_rest,
+            },
         }
     }
 
@@ -116,6 +148,22 @@ impl Application for App {
             .body(err.to_string().into())
             .unwrap()
     }
+}
+
+#[handler(App)]
+async fn nested_rest(#[rest] path: &str) -> Result<Response<Body>, Error> {
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .body(format!("nested rest {}", path).into())
+        .unwrap())
+}
+
+#[handler(App)]
+async fn nested_right(num: usize) -> Result<Response<Body>, Error> {
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .body(format!("nested right {}", num).into())
+        .unwrap())
 }
 
 #[handler(App)]
