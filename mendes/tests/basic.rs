@@ -7,6 +7,20 @@ use hyper::Body;
 use mendes::{dispatch, handler, Application, ClientError, Context};
 
 #[tokio::test]
+async fn test_numbered_invalid() {
+    let req = Request::builder()
+        .uri("https://example.com/numbered/Foo")
+        .body(())
+        .unwrap();
+    let rsp = handle(req).await;
+    assert_eq!(rsp.status(), StatusCode::NOT_FOUND);
+    assert_eq!(
+        &to_bytes(rsp.into_body()).await.unwrap(),
+        &b"404 Not Found"[..]
+    );
+}
+
+#[tokio::test]
 async fn test_numbered() {
     let req = Request::builder()
         .uri("https://example.com/numbered/2016")
