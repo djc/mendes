@@ -1,9 +1,9 @@
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::str;
 use std::time::{Duration, SystemTime};
 
 pub use bincode;
-use data_encoding::BASE64URL_NOPAD;
+use data_encoding::{BASE64URL_NOPAD, HEXLOWER};
 use http::{HeaderValue, Request};
 pub use mendes_macros::cookie;
 use ring::rand::SecureRandom;
@@ -102,6 +102,11 @@ impl Key {
         Ok(Self(aead::LessSafeKey::new(
             aead::UnboundKey::new(&aead::CHACHA20_POLY1305, secret).map_err(|_| ())?,
         )))
+    }
+
+    pub fn from_hex_lower(s: &[u8]) -> Result<Self, ()> {
+        let bytes = HEXLOWER.decode(s).map_err(|_| ())?;
+        Self::new((&*bytes).try_into().unwrap())
     }
 }
 
