@@ -1,11 +1,16 @@
+#[cfg(feature = "uploads")]
 use std::collections::HashMap;
 use std::str;
 
+#[cfg(feature = "uploads")]
 use http::header::{HeaderMap, HeaderValue};
+#[cfg(feature = "httparse")]
 use httparse;
 pub use mendes_macros::form;
+#[cfg(feature = "twoway")]
 use twoway::find_bytes;
 
+#[cfg(feature = "uploads")]
 pub fn multipart_form_data<'b, 'r>(
     headers: &'r HeaderMap<HeaderValue>,
     body: &'b [u8],

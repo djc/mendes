@@ -12,14 +12,17 @@ edition = "2018"
 workspace = ".."
 readme = "../README.md"
 
+[features]
+uploads = ["httparse", "twoway"]
+
 [dependencies]
 async-trait = "0.1"
 futures-util = "0.3"
 http = "0.2"
-httparse = "1.3.4"
+httparse = { version = "1.3.4", optional = true }
 hyper = "0.13"
 mendes-macros = { version = "0.0.9", path = "../mendes-macros" }
-twoway = "0.2"
+twoway = { version = "0.2", optional = true }
 
 [dev-dependencies]
 tokio = { version = "0.2", features = ["macros"] }
