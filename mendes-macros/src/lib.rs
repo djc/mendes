@@ -3,8 +3,20 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 use quote::ToTokens;
 
+mod cookies;
 mod forms;
 mod route;
+
+#[proc_macro_attribute]
+pub fn cookie(_: TokenStream, item: TokenStream) -> TokenStream {
+    let ast = syn::parse::<syn::ItemStruct>(item).unwrap();
+
+    let cookie = cookies::cookie(&ast);
+
+    let mut tokens = ast.to_token_stream();
+    tokens.extend(cookie);
+    TokenStream::from(tokens)
+}
 
 #[proc_macro_attribute]
 pub fn form(meta: TokenStream, item: TokenStream) -> TokenStream {
