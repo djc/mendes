@@ -9,13 +9,13 @@ pub fn cookie(ast: &syn::ItemStruct) -> proc_macro2::TokenStream {
             fn expires() -> Option<std::time::Duration> {
                 Some(std::time::Duration::new(60 * 60 * 6, 0))
             }
-            fn from_header<B>(key: &mendes::cookies::Key, req: &http::Request<B>) -> Option<Self> {
+            fn from_header<B>(key: &mendes::cookies::Key, req: &mendes::http::Request<B>) -> Option<Self> {
                 mendes::cookies::extract(#name, key, req)
             }
-            fn to_string(self, key: &mendes::cookies::Key) -> Result<http::HeaderValue, ()> {
+            fn to_string(self, key: &mendes::cookies::Key) -> Result<mendes::http::HeaderValue, ()> {
                 mendes::cookies::store(#name, key, self)
             }
-            fn tombstone() -> Result<http::HeaderValue, ()> {
+            fn tombstone() -> Result<mendes::http::HeaderValue, ()> {
                 mendes::cookies::tombstone(#name)
             }
         }
