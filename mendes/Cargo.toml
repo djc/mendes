@@ -14,6 +14,8 @@ readme = "../README.md"
 
 [features]
 cookies = ["bincode", "data-encoding", "ring", "serde/derive"]
+forms = ["serde_urlencoded", "serde/derive"]
+json = ["serde_json"]
 uploads = ["httparse", "twoway"]
 with-hyper = ["futures-util", "hyper"]
 
@@ -28,6 +30,8 @@ hyper = { version = "0.13.2", optional = true }
 mendes-macros = { version = "0.0.10", path = "../mendes-macros" }
 ring = { version = "0.16.11", optional = true }
 serde = "1.0.104"
+serde_json = { version = "1.0.48", optional = true }
+serde_urlencoded = { version = "0.6.1", optional = true }
 twoway = { version = "0.2.1", optional = true }
 
 [dev-dependencies]
