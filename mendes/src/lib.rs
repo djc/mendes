@@ -1,8 +1,10 @@
+use std::ops::Deref;
 use std::sync::Arc;
 use std::{fmt, str};
 
 use async_trait::async_trait;
 use http::{Request, Response, StatusCode};
+use serde::Deserialize;
 
 pub use http;
 pub use mendes_macros::{dispatch, handler};
@@ -209,6 +211,43 @@ impl From<ClientError> for StatusCode {
             RequestHeaderFieldsTooLarge => StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE,
             UnavailableForLegalReasons => StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS,
         }
+    }
+}
+
+pub struct FromBody<T>(T);
+
+impl<'de, T> FromBody<T>
+where
+    T: 'de + Deserialize<'de>,
+{
+    #[allow(unused_variables, unreachable_code, dead_code)]
+    pub fn from_bytes(
+        headers: &http::HeaderMap,
+        bytes: &'de [u8],
+    ) -> Result<FromBody<T>, ClientError> {
+        let inner = match headers.get("content-type") {
+            #[cfg(feature = "serde_urlencoded")]
+            Some(t) if t == "application/x-www-form-urlencoded" => {
+                serde_urlencoded::from_bytes::<T>(bytes)
+                    .map_err(|_| ClientError::UnprocessableEntity)?
+            }
+            #[cfg(feature = "serde_json")]
+            Some(t) if t == "application/json" => {
+                serde_json::from_slice::<T>(bytes).map_err(|_| ClientError::UnprocessableEntity)?
+            }
+            None => return Err(ClientError::BadRequest),
+            _ => return Err(ClientError::UnsupportedMediaType),
+        };
+
+        Ok(FromBody(inner))
+    }
+}
+
+impl<T> Deref for FromBody<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
