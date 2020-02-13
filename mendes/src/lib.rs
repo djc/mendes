@@ -12,7 +12,7 @@ use httparse;
 use hyper::header::LOCATION;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Server};
-pub use mendes_macros::{dispatch, handler};
+pub use mendes_macros::{dispatch, form, handler};
 use twoway::find_bytes;
 
 pub async fn run<A>(addr: &SocketAddr, app: A) -> Result<(), hyper::Error>
@@ -269,6 +269,10 @@ impl fmt::Display for ClientError {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(fmt, "{}", StatusCode::from(*self))
     }
+}
+
+pub trait Form {
+    fn form() -> &'static str;
 }
 
 pub mod types {
