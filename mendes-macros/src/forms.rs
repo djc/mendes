@@ -50,7 +50,7 @@ pub fn form(meta: &FormMeta, ast: &syn::ItemStruct) -> proc_macro2::TokenStream 
     let name = &ast.ident;
     let fmt = syn::LitStr::new(&html, Span::call_site());
     let display = quote!(
-        impl mendes::Form for #name<'_> {
+        impl mendes::forms::Form for #name<'_> {
             fn form() -> &'static str {
                 #fmt
             }
