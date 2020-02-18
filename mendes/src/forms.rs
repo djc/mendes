@@ -1,4 +1,5 @@
-use std::str;
+use std::borrow::Cow;
+use std::{fmt, str};
 
 pub use mendes_macros::form;
 #[cfg(feature = "uploads")]
@@ -511,8 +512,186 @@ pub struct File<'a> {
     pub data: &'a [u8],
 }
 
-pub trait Form {
-    fn form() -> &'static str;
+pub struct Form {
+    pub action: Option<&'static str>,
+    pub enctype: Option<&'static str>,
+    pub method: Option<&'static str>,
+    pub sets: Vec<FieldSet>,
+}
+
+impl fmt::Display for Form {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(fmt, "<form")?;
+        if let Some(s) = self.action {
+            write!(fmt, r#" action="{}""#, s)?;
+        }
+        if let Some(s) = self.enctype {
+            write!(fmt, r#" enctype="{}""#, s)?;
+        }
+        if let Some(s) = self.method {
+            write!(fmt, r#" method="{}""#, s)?;
+        }
+        write!(fmt, ">")?;
+        for set in &self.sets {
+            write!(fmt, "{}", set)?;
+        }
+        write!(fmt, "</form>")
+    }
+}
+
+pub struct FieldSet {
+    pub legend: Option<&'static str>,
+    pub items: Vec<Item>,
+}
+
+impl fmt::Display for FieldSet {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(fmt, "<fieldset>")?;
+        if let Some(s) = self.legend {
+            write!(fmt, "<legend>{}</legend>", s)?;
+        }
+        for item in &self.items {
+            write!(fmt, "{}", item)?;
+        }
+        write!(fmt, "</fieldset>")
+    }
+}
+
+pub struct Item {
+    pub label: Option<&'static str>,
+    pub field: Field,
+}
+
+impl fmt::Display for Item {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(s) = self.label {
+            write!(fmt, r#"<label for="{}">{}</label>"#, self.field.name(), s)?;
+        }
+        write!(fmt, "{}", self.field)
+    }
+}
+
+pub enum Field {
+    //Date(Date),
+    Email(Email),
+    File(FileInput),
+    Hidden(Hidden),
+    //Number(Number),
+    Password(Password),
+    Submit(Submit),
+    Text(Text),
+}
+
+impl Field {
+    pub fn name(&self) -> &str {
+        use Field::*;
+        match self {
+            Email(f) => &f.name,
+            File(f) => &f.name,
+            Hidden(f) => &f.name,
+            Password(f) => &f.name,
+            Submit(f) => &f.name,
+            Text(f) => &f.name,
+        }
+    }
+}
+
+impl fmt::Display for Field {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Field::*;
+        match self {
+            Email(f) => write!(fmt, "{}", f),
+            File(f) => write!(fmt, "{}", f),
+            Hidden(f) => write!(fmt, "{}", f),
+            Password(f) => write!(fmt, "{}", f),
+            Submit(f) => write!(fmt, "{}", f),
+            Text(f) => write!(fmt, "{}", f),
+        }
+    }
+}
+
+pub struct Email {
+    pub name: Cow<'static, str>,
+}
+
+impl fmt::Display for Email {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(fmt, r#"<input type="email" name="{}">"#, self.name)
+    }
+}
+
+pub struct FileInput {
+    pub name: Cow<'static, str>,
+}
+
+impl fmt::Display for FileInput {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(fmt, r#"<input type="file" name="{}">"#, self.name)
+    }
+}
+
+pub struct Hidden {
+    pub name: Cow<'static, str>,
+    pub value: Cow<'static, str>,
+}
+
+impl fmt::Display for Hidden {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            fmt,
+            r#"<input type="hidden" name="{}" value="{}">"#,
+            self.name, self.value
+        )
+    }
+}
+
+pub struct Password {
+    pub name: Cow<'static, str>,
+}
+
+impl fmt::Display for Password {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(fmt, r#"<input type="password" name="{}">"#, self.name)
+    }
+}
+
+pub struct Submit {
+    pub name: Cow<'static, str>,
+    pub value: Cow<'static, str>,
+}
+
+impl fmt::Display for Submit {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            fmt,
+            r#"<input type="submit" name="{}" value="{}">"#,
+            self.name, self.value
+        )
+    }
+}
+
+pub struct Text {
+    pub name: Cow<'static, str>,
+}
+
+impl fmt::Display for Text {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(fmt, r#"<input type="text" name="{}">"#, self.name)
+    }
+}
+
+pub trait ToField {
+    fn to_field(name: Cow<'static, str>, params: &[(&str, &str)]) -> Field;
+}
+
+impl ToField for Cow<'_, str> {
+    fn to_field(name: Cow<'static, str>, _: &[(&str, &str)]) -> Field {
+        Field::Text(Text { name })
+    }
+}
+
+pub trait ToForm {
+    fn to_form() -> Form;
 }
 
 #[cfg(feature = "uploads")]

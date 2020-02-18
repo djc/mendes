@@ -10,49 +10,49 @@ pub fn form(meta: &FormMeta, ast: &syn::ItemStruct) -> proc_macro2::TokenStream 
         _ => panic!("only structs with named fields are supported"),
     };
 
-    let mut html = String::new();
-    html.push_str("<form action=\"");
-    html.push_str(&meta.action);
-    html.push_str("\" method=\"post\">");
-
+    let mut new = proc_macro2::TokenStream::new();
     for field in &fields.named {
-        let name = &field.ident.as_ref().unwrap().to_string();
-        let mut ty_tokens = proc_macro2::TokenStream::new();
-        field.ty.to_tokens(&mut ty_tokens);
-        let ty_str = ty_tokens.to_string();
-
-        let kind = if ty_str == "String"
-            || ty_str.starts_with("& '") && ty_str.ends_with("str")
-            || ty_str.starts_with("Cow < '") && ty_str.ends_with("str >")
-        {
-            FieldKind::String
-        } else {
-            panic!("unknown field type {}", ty_str);
-        };
-
-        html.push_str(&format!(
-            "<label for=\"{}\">{}</label>",
-            name,
-            capitalize(name)
+        let name = field.ident.as_ref().unwrap().to_string();
+        let label = syn::LitStr::new(&capitalize(&name), Span::call_site());
+        let ty = &field.ty;
+        new.extend(quote!(
+            mendes::forms::Item {
+                label: Some(#label),
+                field: <#ty as mendes::forms::ToField>::to_field(#name.into(), &[]),
+            },
         ));
-        let input = match kind {
-            FieldKind::String => format!("<input type=\"text\" name=\"{}\">", name),
-        };
-        html.push_str(&input);
     }
 
-    html.push_str(&format!(
-        "<input type=\"submit\" value=\"{}\">",
-        meta.submit
+    let submit = syn::LitStr::new(&meta.submit, Span::call_site());
+    new.extend(quote!(
+        mendes::forms::Item {
+            label: None,
+            field: mendes::forms::Field::Submit(mendes::forms::Submit {
+                name: "submit".into(),
+                value: #submit.into(),
+            }),
+        },
     ));
-    html.push_str("</form>");
 
     let name = &ast.ident;
-    let fmt = syn::LitStr::new(&html, Span::call_site());
+    let action = &meta.action;
+    let (impl_generics, type_generics, where_clause) = &ast.generics.split_for_impl();
     let display = quote!(
-        impl mendes::forms::Form for #name<'_> {
-            fn form() -> &'static str {
-                #fmt
+        impl#impl_generics mendes::forms::ToForm for #name#type_generics #where_clause {
+            fn to_form() -> mendes::forms::Form {
+                mendes::forms::Form {
+                    action: Some(#action),
+                    enctype: None,
+                    method: Some("post"),
+                    sets: vec![
+                        mendes::forms::FieldSet {
+                            legend: None,
+                            items: vec![
+                                #new
+                            ],
+                        }
+                    ],
+                }
             }
         }
     );
@@ -93,10 +93,6 @@ impl Parse for FormMeta {
             submit: submit.unwrap(),
         })
     }
-}
-
-enum FieldKind {
-    String,
 }
 
 fn capitalize(s: &str) -> String {
