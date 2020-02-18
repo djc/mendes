@@ -14,7 +14,12 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
 
     let mut new = proc_macro2::TokenStream::new();
     for field in fields.named.iter_mut() {
-        let mut hidden = false;
+        let name = field.ident.as_ref().unwrap().to_string();
+        let mut label = {
+            let label = syn::LitStr::new(&capitalize(&name), Span::call_site());
+            quote!(Some(#label.into()))
+        };
+
         let params = if let Some((i, attr)) = field
             .attrs
             .iter_mut()
@@ -25,7 +30,9 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
             let mut tokens = proc_macro2::TokenStream::new();
             for (key, value) in syn::parse2::<FieldParams>(input).unwrap().params {
                 if key == "type" && value == "hidden" {
-                    hidden = true;
+                    label = quote!(None);
+                } else if key == "label" {
+                    label = quote!(Some(#value.into()));
                 }
                 tokens.extend(quote!(
                     (#key, #value),
@@ -35,14 +42,6 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
             tokens
         } else {
             quote!()
-        };
-
-        let name = field.ident.as_ref().unwrap().to_string();
-        let label = if hidden {
-            quote!(None)
-        } else {
-            let label = syn::LitStr::new(&capitalize(&name), Span::call_site());
-            quote!(Some(#label.into()))
         };
 
         let ty = &field.ty;
