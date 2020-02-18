@@ -97,7 +97,7 @@ impl fmt::Display for Item {
 }
 
 pub enum Field {
-    //Date(Date),
+    Date(Date),
     Email(Email),
     File(FileInput),
     Hidden(Hidden),
@@ -111,6 +111,7 @@ impl Field {
     pub fn name(&self) -> &str {
         use Field::*;
         match self {
+            Date(f) => &f.name,
             Email(f) => &f.name,
             File(f) => &f.name,
             Hidden(f) => &f.name,
@@ -126,6 +127,7 @@ impl fmt::Display for Field {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         use Field::*;
         match self {
+            Date(f) => write!(fmt, "{}", f),
             Email(f) => write!(fmt, "{}", f),
             File(f) => write!(fmt, "{}", f),
             Hidden(f) => write!(fmt, "{}", f),
@@ -134,6 +136,16 @@ impl fmt::Display for Field {
             Submit(f) => write!(fmt, "{}", f),
             Text(f) => write!(fmt, "{}", f),
         }
+    }
+}
+
+pub struct Date {
+    pub name: Cow<'static, str>,
+}
+
+impl fmt::Display for Date {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(fmt, r#"<input type="date" name="{}">"#, self.name)
     }
 }
 
@@ -242,6 +254,39 @@ impl ToField for Cow<'_, str> {
     }
 }
 
+impl ToField for u8 {
+    fn to_field(name: Cow<'static, str>, params: &[(&str, &str)]) -> Field {
+        for (key, value) in params {
+            if *key == "type" && *value == "hidden" {
+                return Field::Hidden(Hidden::from_params(name, params));
+            }
+        }
+        Field::Number(Number { name })
+    }
+}
+
+impl ToField for u16 {
+    fn to_field(name: Cow<'static, str>, params: &[(&str, &str)]) -> Field {
+        for (key, value) in params {
+            if *key == "type" && *value == "hidden" {
+                return Field::Hidden(Hidden::from_params(name, params));
+            }
+        }
+        Field::Number(Number { name })
+    }
+}
+
+impl ToField for u32 {
+    fn to_field(name: Cow<'static, str>, params: &[(&str, &str)]) -> Field {
+        for (key, value) in params {
+            if *key == "type" && *value == "hidden" {
+                return Field::Hidden(Hidden::from_params(name, params));
+            }
+        }
+        Field::Number(Number { name })
+    }
+}
+
 impl ToField for i32 {
     fn to_field(name: Cow<'static, str>, params: &[(&str, &str)]) -> Field {
         for (key, value) in params {
@@ -250,5 +295,23 @@ impl ToField for i32 {
             }
         }
         Field::Number(Number { name })
+    }
+}
+
+impl ToField for f32 {
+    fn to_field(name: Cow<'static, str>, params: &[(&str, &str)]) -> Field {
+        for (key, value) in params {
+            if *key == "type" && *value == "hidden" {
+                return Field::Hidden(Hidden::from_params(name, params));
+            }
+        }
+        Field::Number(Number { name })
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl ToField for chrono::NaiveDate {
+    fn to_field(name: Cow<'static, str>, _: &[(&str, &str)]) -> Field {
+        Field::Date(Date { name })
     }
 }
