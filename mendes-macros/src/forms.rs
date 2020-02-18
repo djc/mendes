@@ -16,7 +16,7 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
     for field in fields.named.iter_mut() {
         let name = field.ident.as_ref().unwrap().to_string();
         let mut label = {
-            let label = syn::LitStr::new(&capitalize(&name), Span::call_site());
+            let label = syn::LitStr::new(&label(&name), Span::call_site());
             quote!(Some(#label.into()))
         };
 
@@ -151,10 +151,16 @@ impl Parse for FieldParams {
     }
 }
 
-fn capitalize(s: &str) -> String {
-    let mut chars = s.chars();
-    match chars.next() {
-        None => String::new(),
-        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+fn label(s: &str) -> String {
+    let mut new = String::with_capacity(s.len());
+    for (i, c) in s.chars().enumerate() {
+        if i == 0 {
+            new.extend(c.to_uppercase());
+        } else if c == '_' {
+            new.push(' ');
+        } else {
+            new.push(c);
+        }
     }
+    new
 }
