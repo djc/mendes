@@ -20,10 +20,10 @@ pub fn cookie(_: TokenStream, item: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn form(meta: TokenStream, item: TokenStream) -> TokenStream {
-    let ast = syn::parse::<syn::ItemStruct>(item).unwrap();
+    let mut ast = syn::parse::<syn::ItemStruct>(item).unwrap();
     let meta = syn::parse::<forms::FormMeta>(meta).unwrap();
 
-    let display = forms::form(&meta, &ast);
+    let display = forms::form(&meta, &mut ast);
 
     let mut tokens = ast.to_token_stream();
     tokens.extend(display);

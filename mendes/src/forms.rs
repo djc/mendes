@@ -508,23 +508,60 @@ pub struct File<'a> {
     pub data: &'a [u8],
 }
 
+#[cfg(feature = "uploads")]
+impl ToField for File<'_> {
+    fn to_field(name: Cow<'static, str>, _: &[(&str, &str)]) -> Field {
+        Field::File(FileInput { name })
+    }
+}
+
 pub struct Form {
-    pub action: Option<&'static str>,
-    pub enctype: Option<&'static str>,
-    pub method: Option<&'static str>,
+    pub action: Option<Cow<'static, str>>,
+    pub enctype: Option<Cow<'static, str>>,
+    pub method: Option<Cow<'static, str>>,
     pub sets: Vec<FieldSet>,
+}
+
+impl Form {
+    pub fn prepare(mut self) -> Self {
+        let multipart = self
+            .sets
+            .iter()
+            .flat_map(|s| &s.items)
+            .map(|i| &i.field)
+            .find(|f| if let Field::File(_) = f { true } else { false });
+        if multipart.is_some() {
+            self.enctype = Some("multipart/form-data".into());
+        }
+        self
+    }
+
+    pub fn set<T: fmt::Display>(mut self, name: &str, value: T) -> Result<Self, ()> {
+        let field = self
+            .sets
+            .iter_mut()
+            .flat_map(|s| &mut s.items)
+            .map(|i| &mut i.field)
+            .find(|f| f.name() == name);
+        if let Some(Field::Hidden(field)) = field {
+            field.value = Some(value.to_string().into());
+            Ok(self)
+        } else {
+            Err(())
+        }
+    }
 }
 
 impl fmt::Display for Form {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(fmt, "<form")?;
-        if let Some(s) = self.action {
+        if let Some(s) = &self.action {
             write!(fmt, r#" action="{}""#, s)?;
         }
-        if let Some(s) = self.enctype {
+        if let Some(s) = &self.enctype {
             write!(fmt, r#" enctype="{}""#, s)?;
         }
-        if let Some(s) = self.method {
+        if let Some(s) = &self.method {
             write!(fmt, r#" method="{}""#, s)?;
         }
         write!(fmt, ">")?;
@@ -554,13 +591,13 @@ impl fmt::Display for FieldSet {
 }
 
 pub struct Item {
-    pub label: Option<&'static str>,
+    pub label: Option<Cow<'static, str>>,
     pub field: Field,
 }
 
 impl fmt::Display for Item {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(s) = self.label {
+        if let Some(s) = &self.label {
             write!(fmt, r#"<label for="{}">{}</label>"#, self.field.name(), s)?;
         }
         write!(fmt, "{}", self.field)
@@ -572,7 +609,7 @@ pub enum Field {
     Email(Email),
     File(FileInput),
     Hidden(Hidden),
-    //Number(Number),
+    Number(Number),
     Password(Password),
     Submit(Submit),
     Text(Text),
@@ -585,6 +622,7 @@ impl Field {
             Email(f) => &f.name,
             File(f) => &f.name,
             Hidden(f) => &f.name,
+            Number(f) => &f.name,
             Password(f) => &f.name,
             Submit(f) => &f.name,
             Text(f) => &f.name,
@@ -599,6 +637,7 @@ impl fmt::Display for Field {
             Email(f) => write!(fmt, "{}", f),
             File(f) => write!(fmt, "{}", f),
             Hidden(f) => write!(fmt, "{}", f),
+            Number(f) => write!(fmt, "{}", f),
             Password(f) => write!(fmt, "{}", f),
             Submit(f) => write!(fmt, "{}", f),
             Text(f) => write!(fmt, "{}", f),
@@ -628,16 +667,32 @@ impl fmt::Display for FileInput {
 
 pub struct Hidden {
     pub name: Cow<'static, str>,
-    pub value: Cow<'static, str>,
+    pub value: Option<Cow<'static, str>>,
+}
+
+impl Hidden {
+    fn from_params(name: Cow<'static, str>, _: &[(&str, &str)]) -> Self {
+        Self { name, value: None }
+    }
 }
 
 impl fmt::Display for Hidden {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            fmt,
-            r#"<input type="hidden" name="{}" value="{}">"#,
-            self.name, self.value
-        )
+        write!(fmt, r#"<input type="hidden" name="{}""#, self.name)?;
+        if let Some(s) = &self.value {
+            write!(fmt, r#" value="{}""#, s)?;
+        }
+        write!(fmt, ">")
+    }
+}
+
+pub struct Number {
+    pub name: Cow<'static, str>,
+}
+
+impl fmt::Display for Number {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(fmt, r#"<input type="number" name="{}">"#, self.name)
     }
 }
 
@@ -683,6 +738,17 @@ pub trait ToField {
 impl ToField for Cow<'_, str> {
     fn to_field(name: Cow<'static, str>, _: &[(&str, &str)]) -> Field {
         Field::Text(Text { name })
+    }
+}
+
+impl ToField for i32 {
+    fn to_field(name: Cow<'static, str>, params: &[(&str, &str)]) -> Field {
+        for (key, value) in params {
+            if *key == "type" && *value == "hidden" {
+                return Field::Hidden(Hidden::from_params(name, params));
+            }
+        }
+        Field::Number(Number { name })
     }
 }
 
