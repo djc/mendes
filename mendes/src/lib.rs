@@ -11,7 +11,16 @@ pub use mendes_macros::{dispatch, handler};
 
 #[cfg(feature = "cookies")]
 pub mod cookies;
-pub mod forms;
+
+mod form;
+#[cfg(feature = "uploads")]
+mod multipart;
+
+pub mod forms {
+    pub use super::form::*;
+    #[cfg(feature = "uploads")]
+    pub use super::multipart::{from_form_data, File};
+}
 
 #[cfg(feature = "hyper")]
 pub mod hyper {
