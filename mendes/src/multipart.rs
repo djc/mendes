@@ -8,7 +8,7 @@ use serde::Deserialize;
 use twoway::find_bytes;
 
 pub fn from_form_data<'a, T: Deserialize<'a>>(
-    headers: &'a HeaderMap,
+    headers: &HeaderMap,
     input: &'a [u8],
 ) -> std::result::Result<T, Error> {
     let ctype = headers

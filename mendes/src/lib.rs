@@ -1,4 +1,3 @@
-use std::ops::Deref;
 use std::sync::Arc;
 use std::{fmt, str};
 
@@ -223,41 +222,31 @@ impl From<ClientError> for StatusCode {
     }
 }
 
-pub struct FromBody<T>(T);
+#[allow(unused_variables, unreachable_code, dead_code)]
+pub fn from_body_bytes<'de, T: 'de + Deserialize<'de>>(
+    headers: &http::HeaderMap,
+    bytes: &'de [u8],
+) -> Result<T, ClientError> {
+    let inner = match headers.get("content-type") {
+        #[cfg(feature = "serde_urlencoded")]
+        Some(t) if t == "application/x-www-form-urlencoded" => {
+            serde_urlencoded::from_bytes::<T>(bytes)
+                .map_err(|_| ClientError::UnprocessableEntity)?
+        }
+        #[cfg(feature = "serde_json")]
+        Some(t) if t == "application/json" => {
+            serde_json::from_slice::<T>(bytes).map_err(|_| ClientError::UnprocessableEntity)?
+        }
+        #[cfg(feature = "uploads")]
+        Some(t) if t.as_bytes().starts_with(b"multipart/form-data") => {
+            forms::from_form_data::<T>(headers, bytes)
+                .map_err(|_| ClientError::UnprocessableEntity)?
+        }
+        None => return Err(ClientError::BadRequest),
+        _ => return Err(ClientError::UnsupportedMediaType),
+    };
 
-impl<'de, T> FromBody<T>
-where
-    T: 'de + Deserialize<'de>,
-{
-    #[allow(unused_variables, unreachable_code, dead_code)]
-    pub fn from_bytes(
-        headers: &http::HeaderMap,
-        bytes: &'de [u8],
-    ) -> Result<FromBody<T>, ClientError> {
-        let inner = match headers.get("content-type") {
-            #[cfg(feature = "serde_urlencoded")]
-            Some(t) if t == "application/x-www-form-urlencoded" => {
-                serde_urlencoded::from_bytes::<T>(bytes)
-                    .map_err(|_| ClientError::UnprocessableEntity)?
-            }
-            #[cfg(feature = "serde_json")]
-            Some(t) if t == "application/json" => {
-                serde_json::from_slice::<T>(bytes).map_err(|_| ClientError::UnprocessableEntity)?
-            }
-            None => return Err(ClientError::BadRequest),
-            _ => return Err(ClientError::UnsupportedMediaType),
-        };
-
-        Ok(FromBody(inner))
-    }
-}
-
-impl<T> Deref for FromBody<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+    Ok(inner)
 }
 
 impl std::error::Error for ClientError {
