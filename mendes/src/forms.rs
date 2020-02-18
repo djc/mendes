@@ -488,17 +488,13 @@ mod de {
 
     impl Display for Error {
         fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-            formatter.write_str(std::error::Error::description(self))
-        }
-    }
-
-    impl std::error::Error for Error {
-        fn description(&self) -> &str {
-            match *self {
-                Error::Message(ref msg) => msg,
+            match self {
+                Error::Message(msg) => formatter.write_str(msg),
             }
         }
     }
+
+    impl std::error::Error for Error {}
 
     type Result<T> = std::result::Result<T, Error>;
 }
