@@ -1,6 +1,6 @@
 [package]
 name = "mendes"
-version = "0.0.14"
+version = "0.0.15"
 authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
 description = "Rust web toolkit for impatient perfectionists"
 documentation = "https://docs.rs/mendes"
@@ -28,7 +28,7 @@ futures-util = { version = "0.3.4", optional = true }
 http = "0.2"
 httparse = { version = "1.3.4", optional = true }
 hyper = { version = "0.13.2", optional = true }
-mendes-macros = { version = "0.0.11", path = "../mendes-macros" }
+mendes-macros = { version = "0.0.12", path = "../mendes-macros" }
 ring = { version = "0.16.11", optional = true }
 serde = "1.0.104"
 serde_json = { version = "1.0.48", optional = true }
