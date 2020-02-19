@@ -47,7 +47,7 @@ where
         }
     }
 
-    fn next(&mut self) -> Option<&str> {
+    pub fn next_path(&mut self) -> Option<&str> {
         self.path.next(&self.req.uri.path())
     }
 
@@ -97,26 +97,26 @@ impl<'a> FromContext<'a> for &'a http::request::Parts {
 
 impl<'a> FromContext<'a> for Option<&'a str> {
     fn from_context<A: Application>(cx: &'a mut Context<A>) -> Result<Self, A::Error> {
-        Ok(cx.next())
+        Ok(cx.next_path())
     }
 }
 
 impl<'a> FromContext<'a> for &'a str {
     fn from_context<A: Application>(cx: &'a mut Context<A>) -> Result<Self, A::Error> {
-        cx.next().ok_or_else(|| ClientError::NotFound.into())
+        cx.next_path().ok_or_else(|| ClientError::NotFound.into())
     }
 }
 
 impl<'a> FromContext<'a> for usize {
     fn from_context<A: Application>(cx: &'a mut Context<A>) -> Result<Self, A::Error> {
-        let s = cx.next().ok_or(ClientError::NotFound)?;
+        let s = cx.next_path().ok_or(ClientError::NotFound)?;
         usize::from_str(s).map_err(|_| ClientError::NotFound.into())
     }
 }
 
 impl<'a> FromContext<'a> for i32 {
     fn from_context<A: Application>(cx: &'a mut Context<A>) -> Result<Self, A::Error> {
-        let s = cx.next().ok_or(ClientError::NotFound)?;
+        let s = cx.next_path().ok_or(ClientError::NotFound)?;
         i32::from_str(s).map_err(|_| ClientError::NotFound.into())
     }
 }

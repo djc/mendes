@@ -213,7 +213,7 @@ impl quote::ToTokens for Map {
             ));
         }
 
-        tokens.extend(quote!(match cx.next() {
+        tokens.extend(quote!(match cx.next_path() {
             #route_tokens
         }));
     }
