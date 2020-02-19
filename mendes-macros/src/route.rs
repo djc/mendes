@@ -76,7 +76,7 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
             if attr.path.is_ident("rest") {
                 block.push(Statement::get(
                     quote!(
-                        let #pat = __path.rest(&#req_name);
+                        let #pat = __path.rest(#req_name.uri().path());
                     )
                     .into(),
                 ));
@@ -91,7 +91,7 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
                 if path.qself.is_none() && path.path.is_ident("str") {
                     block.push(Statement::get(
                         quote!(
-                            let #pat: #ty = __path.next(&#req_name)
+                            let #pat: #ty = __path.next(#req_name.uri().path())
                                 .ok_or(::mendes::ClientError::NotFound)?;
                         )
                         .into(),
@@ -103,7 +103,7 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
 
         block.push(Statement::get(
             quote!(
-                let #pat: #ty = __path.next(&#req_name)
+                let #pat: #ty = __path.next(#req_name.uri().path())
                     .ok_or(::mendes::ClientError::NotFound)?
                     .parse()
                     .map_err(|_| ::mendes::ClientError::NotFound)?;

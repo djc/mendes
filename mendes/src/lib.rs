@@ -91,7 +91,7 @@ where
     }
 
     pub fn path(&mut self) -> Option<&str> {
-        self.path.next(&self.req)
+        self.path.next(&self.req.uri().path())
     }
 
     pub fn rewind(mut self) -> Self {
@@ -117,13 +117,13 @@ impl PathState {
         Self { prev: None, next }
     }
 
-    pub fn next<'r, B>(&mut self, req: &'r Request<B>) -> Option<&'r str> {
+    pub fn next<'r>(&mut self, path: &'r str) -> Option<&'r str> {
         let start = match self.next.as_ref() {
             Some(v) => *v,
             None => return None,
         };
 
-        let path = &req.uri().path()[start..];
+        let path = &path[start..];
         if path.is_empty() {
             self.prev = self.next.take();
             return None;
@@ -141,14 +141,14 @@ impl PathState {
         }
     }
 
-    pub fn rest<'r, B>(&mut self, req: &'r Request<B>) -> &'r str {
+    pub fn rest<'r>(&mut self, path: &'r str) -> &'r str {
         let start = match self.next.take() {
             Some(v) => v,
             None => return "",
         };
 
         self.prev = Some(start);
-        &req.uri().path()[start..]
+        &path[start..]
     }
 
     fn rewind(&mut self) {
