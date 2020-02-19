@@ -11,7 +11,7 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
     let new = syn::parse::<MethodArgs>(quote!(mut cx: Context<#app_type>).into()).unwrap();
     let old = mem::replace(&mut ast.sig.inputs, new.args);
 
-    let (mut app, mut req, mut rest, mut complete) = ("__app", "__req", vec![], false);
+    let (mut app, mut rest, mut complete) = ("__app", vec![], false);
     for arg in old {
         if complete {
             panic!("more arguments after #[raw] not allowed");
@@ -36,10 +36,6 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
                     app = "app";
                 } else if id.ident == "application" {
                     app = "application";
-                } else if id.ident == "req" {
-                    req = "req";
-                } else if id.ident == "request" {
-                    req = "request";
                 } else {
                     rest.push(arg);
                 }
@@ -54,8 +50,6 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
     let mut block = Vec::with_capacity(ast.block.stmts.len() + rest.len() + 2);
     let app_name = Ident::new(app, Span::call_site());
     block.push(Statement::get(quote!(let #app_name = cx.app();).into()));
-    let req_name = Ident::new(req, Span::call_site());
-    block.push(Statement::get(quote!(let #req_name = cx.req();).into()));
 
     for arg in rest {
         let typed = match &arg {
@@ -77,27 +71,9 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
         }
 
         let ty = &typed.ty;
-        // Handle &str arguments
-        if let syn::Type::Reference(type_ref) = ty.as_ref() {
-            if let syn::Type::Path(path) = type_ref.elem.as_ref() {
-                if path.qself.is_none() && path.path.is_ident("str") {
-                    block.push(Statement::get(
-                        quote!(
-                            let #pat: #ty = cx.next().ok_or(::mendes::ClientError::NotFound)?;
-                        )
-                        .into(),
-                    ));
-                    continue;
-                }
-            }
-        }
-
         block.push(Statement::get(
             quote!(
-                let #pat: #ty = cx.next()
-                    .ok_or(::mendes::ClientError::NotFound)?
-                    .parse()
-                    .map_err(|_| ::mendes::ClientError::NotFound)?;
+                let #pat = <#ty as mendes::FromContext>::from_context(&mut cx)?;
             )
             .into(),
         ));
