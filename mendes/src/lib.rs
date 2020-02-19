@@ -76,9 +76,10 @@ pub struct Context<A>
 where
     A: Application,
 {
-    pub app: Arc<A>,
-    pub req: Request<A::RequestBody>,
-    pub path: PathState,
+    app: Arc<A>,
+    req: http::request::Parts,
+    body: Option<A::RequestBody>,
+    path: PathState,
 }
 
 impl<A> Context<A>
@@ -87,20 +88,54 @@ where
 {
     pub fn new(app: Arc<A>, req: Request<A::RequestBody>) -> Context<A> {
         let path = PathState::new(req.uri().path());
-        Context { app, req, path }
+        let (req, body) = req.into_parts();
+        Context {
+            app,
+            req,
+            body: Some(body),
+            path,
+        }
     }
 
-    pub fn path(&mut self) -> Option<&str> {
-        self.path.next(&self.req.uri().path())
+    pub fn next(&mut self) -> Option<&str> {
+        self.path.next(&self.req.uri.path())
+    }
+
+    pub fn rest(&mut self) -> &str {
+        self.path.rest(&self.req.uri.path())
+    }
+
+    pub fn take_body(&mut self) -> Option<A::RequestBody> {
+        self.body.take()
     }
 
     pub fn rewind(mut self) -> Self {
         self.path.rewind();
         self
     }
+
+    pub fn app(&self) -> &Arc<A> {
+        &self.app
+    }
+
+    pub fn req(&self) -> &http::request::Parts {
+        &self.req
+    }
+
+    pub fn method(&self) -> &http::Method {
+        &self.req.method
+    }
+
+    pub fn uri(&self) -> &http::uri::Uri {
+        &self.req.uri
+    }
+
+    pub fn headers(&self) -> &http::HeaderMap {
+        &self.req.headers
+    }
 }
 
-pub struct PathState {
+struct PathState {
     prev: Option<usize>,
     next: Option<usize>,
 }
@@ -117,7 +152,7 @@ impl PathState {
         Self { prev: None, next }
     }
 
-    pub fn next<'r>(&mut self, path: &'r str) -> Option<&'r str> {
+    fn next<'r>(&mut self, path: &'r str) -> Option<&'r str> {
         let start = match self.next.as_ref() {
             Some(v) => *v,
             None => return None,
@@ -141,7 +176,7 @@ impl PathState {
         }
     }
 
-    pub fn rest<'r>(&mut self, path: &'r str) -> &'r str {
+    fn rest<'r>(&mut self, path: &'r str) -> &'r str {
         let start = match self.next.take() {
             Some(v) => v,
             None => return "",

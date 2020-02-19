@@ -8,7 +8,7 @@ use syn::punctuated::Punctuated;
 use syn::token::Comma;
 
 pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
-    let new = syn::parse::<MethodArgs>(quote!(cx: Context<#app_type>).into()).unwrap();
+    let new = syn::parse::<MethodArgs>(quote!(mut cx: Context<#app_type>).into()).unwrap();
     let old = mem::replace(&mut ast.sig.inputs, new.args);
 
     let (mut app, mut req, mut rest, mut complete) = ("__app", "__req", vec![], false);
@@ -51,19 +51,11 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
         }
     }
 
-    let mut block = Vec::with_capacity(ast.block.stmts.len() + rest.len() + 6);
-    block.push(Statement::get(
-        quote!(
-            let Context { app, req, path } = cx;
-        )
-        .into(),
-    ));
-
+    let mut block = Vec::with_capacity(ast.block.stmts.len() + rest.len() + 2);
     let app_name = Ident::new(app, Span::call_site());
-    block.push(Statement::get(quote!(let #app_name = app;).into()));
+    block.push(Statement::get(quote!(let #app_name = cx.app();).into()));
     let req_name = Ident::new(req, Span::call_site());
-    block.push(Statement::get(quote!(let #req_name = req;).into()));
-    block.push(Statement::get(quote!(let mut __path = path;).into()));
+    block.push(Statement::get(quote!(let #req_name = cx.req();).into()));
 
     for arg in rest {
         let typed = match &arg {
@@ -76,7 +68,7 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
             if attr.path.is_ident("rest") {
                 block.push(Statement::get(
                     quote!(
-                        let #pat = __path.rest(#req_name.uri().path());
+                        let #pat = cx.rest();
                     )
                     .into(),
                 ));
@@ -91,8 +83,7 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
                 if path.qself.is_none() && path.path.is_ident("str") {
                     block.push(Statement::get(
                         quote!(
-                            let #pat: #ty = __path.next(#req_name.uri().path())
-                                .ok_or(::mendes::ClientError::NotFound)?;
+                            let #pat: #ty = cx.next().ok_or(::mendes::ClientError::NotFound)?;
                         )
                         .into(),
                     ));
@@ -103,7 +94,7 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
 
         block.push(Statement::get(
             quote!(
-                let #pat: #ty = __path.next(#req_name.uri().path())
+                let #pat: #ty = cx.next()
                     .ok_or(::mendes::ClientError::NotFound)?
                     .parse()
                     .map_err(|_| ::mendes::ClientError::NotFound)?;
@@ -182,7 +173,7 @@ pub fn dispatch(ast: &mut syn::ItemFn) {
     };
 
     let new = quote!({
-        let app = cx.app.clone();
+        let app = cx.app().clone();
         #routes
     });
 
@@ -246,7 +237,7 @@ impl quote::ToTokens for Map {
             ));
         }
 
-        tokens.extend(quote!(match cx.path() {
+        tokens.extend(quote!(match cx.next() {
             #route_tokens
         }));
     }
