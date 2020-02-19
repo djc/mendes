@@ -47,7 +47,7 @@ where
         }
     }
 
-    pub fn next(&mut self) -> Option<&str> {
+    fn next(&mut self) -> Option<&str> {
         self.path.next(&self.req.uri.path())
     }
 
