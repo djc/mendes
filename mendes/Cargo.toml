@@ -17,11 +17,12 @@ cookies = ["bincode", "data-encoding", "ring", "serde/derive"]
 forms = ["serde_urlencoded", "serde/derive"]
 json = ["serde_json"]
 uploads = ["httparse", "twoway"]
-with-hyper = ["futures-util", "hyper"]
+with-hyper = ["bytes", "futures-util", "hyper"]
 
 [dependencies]
 async-trait = "0.1.24"
 bincode = { version = "1.2.1", optional = true }
+bytes = { version = "0.5.4", optional = true }
 chrono = { version = "0.4.10", optional = true }
 data-encoding = { version = "2.1.2", optional = true }
 futures-util = { version = "0.3.4", optional = true }

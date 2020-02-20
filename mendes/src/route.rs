@@ -121,6 +121,29 @@ impl<'a> FromContext<'a> for i32 {
     }
 }
 
+#[cfg(feature = "hyper")]
+impl<A> Context<A>
+where
+    A: Application,
+    A::RequestBody: hyper::body::HttpBody,
+{
+    pub async fn from_body<'a, T>(&'a mut self) -> Result<T, A::Error>
+    where
+        T: 'a + Deserialize<'a>,
+    {
+        let future = self.take_body().ok_or(ClientError::BadRequest)?;
+        let bytes = hyper::body::to_bytes(future)
+            .await
+            .map_err(|_| ClientError::BadRequest)?;
+        self.req.extensions.insert(BodyBytes(bytes));
+        let slice = self.req.extensions.get::<BodyBytes>().unwrap();
+        Ok(from_body_bytes(&self.req.headers, &slice.0)?)
+    }
+}
+
+#[cfg(feature = "hyper")]
+struct BodyBytes(bytes::Bytes);
+
 struct PathState {
     prev: Option<usize>,
     next: Option<usize>,
