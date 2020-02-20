@@ -11,80 +11,81 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
     let new = syn::parse::<MethodArgs>(quote!(mut cx: Context<#app_type>).into()).unwrap();
     let old = mem::replace(&mut ast.sig.inputs, new.args);
 
-    let (mut app, mut rest, mut complete) = ("__app", vec![], false);
-    for arg in old {
-        if complete {
-            panic!("more arguments after #[raw] not allowed");
-        }
-
-        let ty = match &arg {
-            syn::FnArg::Typed(ty) => ty,
-            _ => panic!("did not expect receiver argument in handler"),
-        };
-
-        if let Some(attr) = ty.attrs.first() {
-            if attr.path.is_ident("raw") {
-                complete = true;
-                continue;
-            }
-        }
-
-        use syn::Pat::*;
-        match ty.pat.as_ref() {
-            Ident(id) => {
-                if id.ident == "app" {
-                    app = "app";
-                } else if id.ident == "application" {
-                    app = "application";
-                } else {
-                    rest.push(arg);
-                }
-            }
-            Wild(_) => continue,
-            _ => {
-                rest.push(arg);
-            }
-        }
-    }
-
-    let mut block = Vec::with_capacity(ast.block.stmts.len() + rest.len() + 2);
-    let app_name = Ident::new(app, Span::call_site());
-    block.push(Statement::get(quote!(let #app_name = cx.app();).into()));
-
-    for arg in rest {
-        let typed = match &arg {
+    let (mut app, mut body, mut args, mut rest) = ("__app", None, vec![], None);
+    for arg in old.iter() {
+        let typed = match arg {
             syn::FnArg::Typed(typed) => typed,
             _ => panic!("did not expect receiver argument in handler"),
         };
 
+        use syn::Pat::*;
         let (pat, ty) = (&typed.pat, &typed.ty);
-        if let Some(attr) = typed.attrs.first() {
-            if attr.path.is_ident("rest") {
-                block.push(Statement::get(
-                    quote!(
-                        let #pat = cx.rest();
-                    )
-                    .into(),
-                ));
-                break;
-            } else if attr.path.is_ident("body") {
-                block.push(Statement::get(
-                    quote!(
-                        let #pat = cx.from_body::<#ty>();
-                    )
-                    .into(),
-                ));
+        if let Ident(id) = pat.as_ref() {
+            if id.ident == "app" {
+                app = "app";
+                continue;
+            } else if id.ident == "application" {
+                app = "application";
+                continue;
             }
         }
 
+        if let Some(attr) = typed.attrs.first() {
+            if attr.path.is_ident("rest") {
+                rest = Some(pat);
+                continue;
+            } else if attr.path.is_ident("body") {
+                body = Some((pat, ty));
+                continue;
+            }
+        }
+
+        if rest.is_some() {
+            panic!("more arguments after #[raw] not allowed");
+        }
+
+        args.push((pat, ty));
+    }
+
+    let mut block = Vec::with_capacity(ast.block.stmts.len());
+    if body.is_some() {
         block.push(Statement::get(
             quote!(
-                let #pat = <#ty as mendes::FromContext>::from_context(&mut cx)?;
+                mendes::route::retrieve_body(&mut cx).await?;
             )
             .into(),
         ));
     }
 
+    for (pat, ty) in args {
+        block.push(Statement::get(
+            quote!(
+                let #pat = <#ty as mendes::FromContext>::from_context::<#app_type>(&cx.req, &mut cx.path)?;
+            )
+            .into(),
+        ));
+    }
+
+    if let Some(pat) = rest {
+        block.push(Statement::get(
+            quote!(
+                let #pat = cx.path.rest(&cx.req.uri.path());
+            )
+            .into(),
+        ));
+    }
+
+    if let Some((pat, ty)) = body {
+        block.push(Statement::get(
+            quote!(
+                let #pat = mendes::route::from_body::<#ty>(&cx.req)?;
+            )
+            .into(),
+        ));
+    }
+
+    let app_name = Ident::new(app, Span::call_site());
+    block.push(Statement::get(quote!(let #app_name = &cx.app;).into()));
     let old = mem::replace(&mut ast.block.stmts, block);
     ast.block.stmts.extend(old);
 }
