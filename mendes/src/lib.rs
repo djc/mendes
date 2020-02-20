@@ -11,7 +11,7 @@ pub mod cookies;
 mod form;
 #[cfg(feature = "uploads")]
 mod multipart;
-mod route;
+pub mod route;
 
 pub use route::{from_body_bytes, Application, Context, FromContext};
 

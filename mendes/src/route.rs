@@ -3,6 +3,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use http::request::Parts;
 use http::{Request, Response};
 use serde::Deserialize;
 
@@ -26,10 +27,10 @@ pub struct Context<A>
 where
     A: Application,
 {
-    app: Arc<A>,
-    req: http::request::Parts,
-    body: Option<A::RequestBody>,
-    path: PathState,
+    pub app: Arc<A>,
+    pub req: http::request::Parts,
+    pub body: Option<A::RequestBody>,
+    pub path: PathState,
 }
 
 impl<A> Context<A>
@@ -47,29 +48,28 @@ where
         }
     }
 
+    #[doc(hidden)]
     pub fn next_path(&mut self) -> Option<&str> {
         self.path.next(&self.req.uri.path())
     }
 
+    #[doc(hidden)]
     pub fn rest(&mut self) -> &str {
         self.path.rest(&self.req.uri.path())
+    }
+
+    #[doc(hidden)]
+    pub fn rewind(mut self) -> Self {
+        self.path.rewind();
+        self
     }
 
     pub fn take_body(&mut self) -> Option<A::RequestBody> {
         self.body.take()
     }
 
-    pub fn rewind(mut self) -> Self {
-        self.path.rewind();
-        self
-    }
-
     pub fn app(&self) -> &Arc<A> {
         &self.app
-    }
-
-    pub fn req(&self) -> &http::request::Parts {
-        &self.req
     }
 
     pub fn method(&self) -> &http::Method {
@@ -86,65 +86,86 @@ where
 }
 
 pub trait FromContext<'a>: Sized {
-    fn from_context<A: Application>(cx: &'a mut Context<A>) -> Result<Self, A::Error>;
+    fn from_context<A: Application>(
+        req: &'a Parts,
+        state: &mut PathState,
+    ) -> Result<Self, A::Error>;
 }
 
 impl<'a> FromContext<'a> for &'a http::request::Parts {
-    fn from_context<A: Application>(cx: &'a mut Context<A>) -> Result<Self, A::Error> {
-        Ok(&cx.req)
+    fn from_context<A: Application>(req: &'a Parts, _: &mut PathState) -> Result<Self, A::Error> {
+        Ok(req)
     }
 }
 
 impl<'a> FromContext<'a> for Option<&'a str> {
-    fn from_context<A: Application>(cx: &'a mut Context<A>) -> Result<Self, A::Error> {
-        Ok(cx.next_path())
+    fn from_context<A: Application>(
+        req: &'a Parts,
+        state: &mut PathState,
+    ) -> Result<Self, A::Error> {
+        Ok(state.next(&req.uri.path()))
     }
 }
 
 impl<'a> FromContext<'a> for &'a str {
-    fn from_context<A: Application>(cx: &'a mut Context<A>) -> Result<Self, A::Error> {
-        cx.next_path().ok_or_else(|| ClientError::NotFound.into())
+    fn from_context<A: Application>(
+        req: &'a Parts,
+        state: &mut PathState,
+    ) -> Result<Self, A::Error> {
+        state
+            .next(&req.uri.path())
+            .ok_or_else(|| ClientError::NotFound.into())
     }
 }
 
 impl<'a> FromContext<'a> for usize {
-    fn from_context<A: Application>(cx: &'a mut Context<A>) -> Result<Self, A::Error> {
-        let s = cx.next_path().ok_or(ClientError::NotFound)?;
+    fn from_context<A: Application>(
+        req: &'a Parts,
+        state: &mut PathState,
+    ) -> Result<Self, A::Error> {
+        let s = state.next(&req.uri.path()).ok_or(ClientError::NotFound)?;
         usize::from_str(s).map_err(|_| ClientError::NotFound.into())
     }
 }
 
 impl<'a> FromContext<'a> for i32 {
-    fn from_context<A: Application>(cx: &'a mut Context<A>) -> Result<Self, A::Error> {
-        let s = cx.next_path().ok_or(ClientError::NotFound)?;
+    fn from_context<A: Application>(
+        req: &'a Parts,
+        state: &mut PathState,
+    ) -> Result<Self, A::Error> {
+        let s = state.next(&req.uri.path()).ok_or(ClientError::NotFound)?;
         i32::from_str(s).map_err(|_| ClientError::NotFound.into())
     }
 }
 
 #[cfg(feature = "hyper")]
-impl<A> Context<A>
+pub async fn retrieve_body<A>(cx: &mut Context<A>) -> Result<(), ClientError>
 where
     A: Application,
     A::RequestBody: hyper::body::HttpBody,
 {
-    pub async fn from_body<'a, T>(&'a mut self) -> Result<T, A::Error>
-    where
-        T: 'a + Deserialize<'a>,
-    {
-        let future = self.take_body().ok_or(ClientError::BadRequest)?;
-        let bytes = hyper::body::to_bytes(future)
-            .await
-            .map_err(|_| ClientError::BadRequest)?;
-        self.req.extensions.insert(BodyBytes(bytes));
-        let slice = self.req.extensions.get::<BodyBytes>().unwrap();
-        Ok(from_body_bytes(&self.req.headers, &slice.0)?)
-    }
+    let future = cx.take_body().ok_or(ClientError::BadRequest)?;
+    let bytes = hyper::body::to_bytes(future)
+        .await
+        .map_err(|_| ClientError::BadRequest)?;
+    cx.req.extensions.insert(BodyBytes(bytes));
+    Ok(())
+}
+
+#[cfg(feature = "bytes")]
+pub fn from_body<'a, T>(req: &'a Parts) -> Result<T, ClientError>
+where
+    T: 'a + Deserialize<'a>,
+{
+    let bytes = req.extensions.get::<BodyBytes>().unwrap();
+    Ok(from_body_bytes(&req.headers, &bytes.0)?)
 }
 
 #[cfg(feature = "hyper")]
 struct BodyBytes(bytes::Bytes);
 
-struct PathState {
+#[doc(hidden)]
+pub struct PathState {
     prev: Option<usize>,
     next: Option<usize>,
 }
@@ -161,7 +182,7 @@ impl PathState {
         Self { prev: None, next }
     }
 
-    fn next<'r>(&mut self, path: &'r str) -> Option<&'r str> {
+    pub fn next<'r>(&mut self, path: &'r str) -> Option<&'r str> {
         let start = match self.next.as_ref() {
             Some(v) => *v,
             None => return None,
@@ -185,7 +206,7 @@ impl PathState {
         }
     }
 
-    fn rest<'r>(&mut self, path: &'r str) -> &'r str {
+    pub fn rest<'r>(&mut self, path: &'r str) -> &'r str {
         let start = match self.next.take() {
             Some(v) => v,
             None => return "",
@@ -195,7 +216,7 @@ impl PathState {
         &path[start..]
     }
 
-    fn rewind(&mut self) {
+    pub fn rewind(&mut self) {
         self.next = self.prev.take();
     }
 }
