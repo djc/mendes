@@ -4,14 +4,14 @@ use std::time::{Duration, SystemTime};
 
 pub use bincode;
 use data_encoding::{BASE64URL_NOPAD, HEXLOWER};
-use http::{HeaderValue, Request};
+use http::{HeaderMap, HeaderValue};
 pub use mendes_macros::cookie;
 use ring::rand::SecureRandom;
 use ring::{aead, rand};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-pub fn extract<B, T: CookieData>(name: &str, key: &Key, req: &Request<B>) -> Option<T> {
-    let cookies = req.headers().get("cookie")?;
+pub fn extract<T: CookieData>(name: &str, key: &Key, headers: &HeaderMap) -> Option<T> {
+    let cookies = headers.get("cookie")?;
     let cookies = str::from_utf8(cookies.as_ref()).ok()?;
 
     let mut found = None;
@@ -80,7 +80,7 @@ pub fn tombstone(name: &str) -> Result<HeaderValue, ()> {
 
 pub trait CookieData: DeserializeOwned + Serialize {
     fn expires() -> Option<Duration>;
-    fn from_header<B>(key: &Key, req: &Request<B>) -> Option<Self>;
+    fn from_header(key: &Key, headers: &HeaderMap) -> Option<Self>;
     fn to_string(self, key: &Key) -> Result<HeaderValue, ()>;
     fn tombstone() -> Result<http::HeaderValue, ()>;
 }
