@@ -57,7 +57,7 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
             _ => panic!("did not expect receiver argument in handler"),
         };
 
-        let pat = &typed.pat;
+        let (pat, ty) = (&typed.pat, &typed.ty);
         if let Some(attr) = typed.attrs.first() {
             if attr.path.is_ident("rest") {
                 block.push(Statement::get(
@@ -67,10 +67,16 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
                     .into(),
                 ));
                 break;
+            } else if attr.path.is_ident("body") {
+                block.push(Statement::get(
+                    quote!(
+                        let #pat = cx.from_body::<#ty>();
+                    )
+                    .into(),
+                ));
             }
         }
 
-        let ty = &typed.ty;
         block.push(Statement::get(
             quote!(
                 let #pat = <#ty as mendes::FromContext>::from_context(&mut cx)?;
