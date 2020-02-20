@@ -138,27 +138,29 @@ impl<'a> FromContext<'a> for i32 {
     }
 }
 
+#[doc(hidden)]
 #[cfg(feature = "hyper")]
-pub async fn retrieve_body<A>(cx: &mut Context<A>) -> Result<(), ClientError>
+impl<A> Context<A>
 where
     A: Application,
     A::RequestBody: hyper::body::HttpBody,
 {
-    let future = cx.take_body().ok_or(ClientError::BadRequest)?;
-    let bytes = hyper::body::to_bytes(future)
-        .await
-        .map_err(|_| ClientError::BadRequest)?;
-    cx.req.extensions.insert(BodyBytes(bytes));
-    Ok(())
-}
+    pub async fn retrieve_body(&mut self) -> Result<(), ClientError> {
+        let future = self.take_body().ok_or(ClientError::BadRequest)?;
+        let bytes = hyper::body::to_bytes(future)
+            .await
+            .map_err(|_| ClientError::BadRequest)?;
+        self.req.extensions.insert(BodyBytes(bytes));
+        Ok(())
+    }
 
-#[cfg(feature = "bytes")]
-pub fn from_body<'a, T>(req: &'a Parts) -> Result<T, ClientError>
-where
-    T: 'a + Deserialize<'a>,
-{
-    let bytes = req.extensions.get::<BodyBytes>().unwrap();
-    Ok(from_body_bytes(&req.headers, &bytes.0)?)
+    pub fn from_body<'a, T>(&'a self) -> Result<T, ClientError>
+    where
+        T: 'a + Deserialize<'a>,
+    {
+        let bytes = self.req.extensions.get::<BodyBytes>().unwrap();
+        Ok(from_body_bytes(&self.req.headers, &bytes.0)?)
+    }
 }
 
 #[cfg(feature = "hyper")]

@@ -51,7 +51,7 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
     if body.is_some() {
         block.push(Statement::get(
             quote!(
-                mendes::route::retrieve_body(&mut cx).await?;
+                cx.retrieve_body().await?;
             )
             .into(),
         ));
@@ -78,7 +78,7 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
     if let Some((pat, ty)) = body {
         block.push(Statement::get(
             quote!(
-                let #pat = mendes::route::from_body::<#ty>(&cx.req)?;
+                let #pat = cx.from_body::<#ty>()?;
             )
             .into(),
         ));
