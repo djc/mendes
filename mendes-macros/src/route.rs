@@ -148,6 +148,8 @@ pub fn dispatch(ast: &mut syn::ItemFn) {
     };
 
     let new = quote!({
+        use mendes::Application;
+        use mendes::route::Responder;
         let app = cx.app().clone();
         #routes
     });
@@ -200,7 +202,7 @@ impl quote::ToTokens for Target {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         match self {
             Target::Direct(expr) => quote!(
-                #expr(cx).await.unwrap_or_else(|e| app.error(e))
+                #expr(cx).await.into_response(&*app)
             )
             .to_tokens(tokens),
             Target::MethodMap(map) => map.to_tokens(tokens),

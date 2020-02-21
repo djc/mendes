@@ -23,6 +23,25 @@ pub trait Application: Sized {
     fn error(&self, error: Self::Error) -> Response<Self::ResponseBody>;
 }
 
+pub trait Responder<A: Application> {
+    fn into_response(self, app: &A) -> Response<A::ResponseBody>;
+}
+
+impl<A: Application> Responder<A> for Result<Response<A::ResponseBody>, A::Error> {
+    fn into_response(self, app: &A) -> Response<A::ResponseBody> {
+        match self {
+            Ok(rsp) => rsp,
+            Err(e) => app.error(e),
+        }
+    }
+}
+
+impl<A: Application> Responder<A> for Response<A::ResponseBody> {
+    fn into_response(self, _: &A) -> Response<A::ResponseBody> {
+        self
+    }
+}
+
 pub struct Context<A>
 where
     A: Application,
