@@ -133,23 +133,15 @@ impl Parse for Statement {
 pub fn dispatch(ast: &mut syn::ItemFn) {
     let (block, routes) = match ast.block.stmts.get_mut(0) {
         Some(syn::Stmt::Item(syn::Item::Macro(expr))) => {
-            if !expr.mac.path.is_ident("path") {
-                panic!("dispatch function does not call the path!() macro")
-            } else {
-                let map = expr.mac.parse_body::<Map>().unwrap();
-                (&mut ast.block, map)
-            }
+            let target = Target::from_item(expr);
+            (&mut ast.block, target)
         }
         Some(syn::Stmt::Item(syn::Item::Fn(inner))) => {
             if let Some(syn::Stmt::Item(syn::Item::Macro(expr))) = inner.block.stmts.get(0) {
-                if !expr.mac.path.is_ident("path") {
-                    panic!("dispatch function does not call the path!() macro")
-                } else {
-                    let map = expr.mac.parse_body::<Map>().unwrap();
-                    (&mut inner.block, map)
-                }
+                let target = Target::from_item(expr);
+                (&mut inner.block, target)
             } else {
-                panic!("did not find expression statement in nested function block");
+                panic!("did not find expression statement in nested function block")
             }
         }
         _ => panic!("did not find expression statement in block"),
@@ -164,6 +156,50 @@ pub fn dispatch(ast: &mut syn::ItemFn) {
         block,
         Box::new(syn::parse::<syn::Block>(new.into()).unwrap()),
     );
+}
+
+#[allow(clippy::large_enum_variant)]
+enum Target {
+    Direct(syn::Expr),
+    Routes(Map),
+}
+
+impl Target {
+    fn from_expr(expr: syn::Expr) -> Self {
+        let mac = match expr {
+            syn::Expr::Macro(mac) => mac,
+            _ => return Target::Direct(expr),
+        };
+
+        if mac.mac.path.is_ident("path") {
+            Target::Routes(mac.mac.parse_body().unwrap())
+        } else {
+            panic!("unknown macro used as dispatch target")
+        }
+    }
+
+    fn from_item(expr: &syn::ItemMacro) -> Self {
+        if expr.mac.path.is_ident("path") {
+            Target::Routes(expr.mac.parse_body().unwrap())
+        } else {
+            panic!("unknown macro used as dispatch target")
+        }
+    }
+}
+
+impl Parse for Target {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        Ok(Target::from_expr(input.parse::<syn::Expr>()?))
+    }
+}
+
+impl quote::ToTokens for Target {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        match self {
+            Target::Direct(expr) => expr.to_tokens(tokens),
+            Target::Routes(map) => map.to_tokens(tokens),
+        }
+    }
 }
 
 struct Map {
@@ -235,23 +271,7 @@ impl Parse for Route {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let component = input.parse()?;
         input.parse::<syn::Token![=>]>()?;
-        let expr = input.parse::<syn::Expr>()?;
-        let target = if let syn::Expr::Macro(mac) = &expr {
-            if mac.mac.path.is_ident("path") {
-                Target::Routes(mac.mac.parse_body().unwrap())
-            } else {
-                Target::Direct(expr)
-            }
-        } else {
-            Target::Direct(expr)
-        };
-
+        let target = input.parse()?;
         Ok(Route { component, target })
     }
-}
-
-#[allow(clippy::large_enum_variant)]
-enum Target {
-    Direct(syn::Expr),
-    Routes(Map),
 }
