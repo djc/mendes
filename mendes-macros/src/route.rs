@@ -161,7 +161,7 @@ pub fn dispatch(ast: &mut syn::ItemFn) {
 #[allow(clippy::large_enum_variant)]
 enum Target {
     Direct(syn::Expr),
-    Routes(Map),
+    PathMap(PathMap),
 }
 
 impl Target {
@@ -180,7 +180,7 @@ impl Target {
 
     fn from_macro(mac: &syn::Macro) -> Self {
         if mac.path.is_ident("path") {
-            Target::Routes(mac.parse_body().unwrap())
+            Target::PathMap(mac.parse_body().unwrap())
         } else {
             panic!("unknown macro used as dispatch target")
         }
@@ -197,16 +197,16 @@ impl quote::ToTokens for Target {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         match self {
             Target::Direct(expr) => expr.to_tokens(tokens),
-            Target::Routes(map) => map.to_tokens(tokens),
+            Target::PathMap(map) => map.to_tokens(tokens),
         }
     }
 }
 
-struct Map {
+struct PathMap {
     routes: Vec<(syn::Pat, Target)>,
 }
 
-impl Parse for Map {
+impl Parse for PathMap {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut routes = vec![];
         while !input.is_empty() {
@@ -222,11 +222,11 @@ impl Parse for Map {
             let target = input.parse()?;
             routes.push((component, target));
         }
-        Ok(Map { routes })
+        Ok(PathMap { routes })
     }
 }
 
-impl quote::ToTokens for Map {
+impl quote::ToTokens for PathMap {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let mut route_tokens = proc_macro2::TokenStream::new();
         let mut wildcard = false;
@@ -243,7 +243,7 @@ impl quote::ToTokens for Map {
 
             let nested = match target {
                 Target::Direct(expr) => quote!(#expr(cx).await.unwrap_or_else(|e| app.error(e))),
-                Target::Routes(routes) => quote!(#routes),
+                Target::PathMap(routes) => quote!(#routes),
             };
 
             if rewind {
