@@ -162,6 +162,7 @@ pub fn dispatch(ast: &mut syn::ItemFn) {
 enum Target {
     Direct(syn::Expr),
     PathMap(PathMap),
+    MethodMap(MethodMap),
 }
 
 impl Target {
@@ -181,6 +182,8 @@ impl Target {
     fn from_macro(mac: &syn::Macro) -> Self {
         if mac.path.is_ident("path") {
             Target::PathMap(mac.parse_body().unwrap())
+        } else if mac.path.is_ident("method") {
+            Target::MethodMap(mac.parse_body().unwrap())
         } else {
             panic!("unknown macro used as dispatch target")
         }
@@ -197,6 +200,7 @@ impl quote::ToTokens for Target {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         match self {
             Target::Direct(expr) => expr.to_tokens(tokens),
+            Target::MethodMap(map) => map.to_tokens(tokens),
             Target::PathMap(map) => map.to_tokens(tokens),
         }
     }
@@ -226,6 +230,65 @@ impl Parse for PathMap {
     }
 }
 
+struct MethodMap {
+    routes: Vec<(syn::Ident, Target)>,
+}
+
+impl Parse for MethodMap {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut routes = vec![];
+        while !input.is_empty() {
+            if !routes.is_empty() {
+                let _ = input.parse::<syn::Token![,]>();
+                if input.is_empty() {
+                    break;
+                }
+            }
+
+            let component = input.parse()?;
+            input.parse::<syn::Token![=>]>()?;
+            let target = input.parse()?;
+            routes.push((component, target));
+        }
+        Ok(MethodMap { routes })
+    }
+}
+
+impl quote::ToTokens for MethodMap {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let mut route_tokens = proc_macro2::TokenStream::new();
+        let mut wildcard = false;
+        for (component, target) in self.routes.iter() {
+            if component == "_" {
+                wildcard = true;
+            }
+
+            quote!(mendes::http::Method::#component).to_tokens(&mut route_tokens);
+            route_tokens.append(Punct::new('=', Spacing::Joint));
+            route_tokens.append(Punct::new('>', Spacing::Alone));
+
+            let nested = match target {
+                Target::Direct(expr) => quote!(#expr(cx).await.unwrap_or_else(|e| app.error(e))),
+                Target::PathMap(routes) => quote!(#routes),
+                Target::MethodMap(routes) => quote!(#routes),
+            };
+
+            route_tokens.append_all(nested);
+            route_tokens.append(Punct::new(',', Spacing::Alone));
+        }
+
+        if !wildcard {
+            route_tokens.extend(quote!(
+                _ => app.error(::mendes::ClientError::MethodNotAllowed.into()),
+            ));
+        }
+
+        tokens.extend(quote!(match cx.req.method {
+            #route_tokens
+        }));
+    }
+}
+
 impl quote::ToTokens for PathMap {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let mut route_tokens = proc_macro2::TokenStream::new();
@@ -243,6 +306,7 @@ impl quote::ToTokens for PathMap {
 
             let nested = match target {
                 Target::Direct(expr) => quote!(#expr(cx).await.unwrap_or_else(|e| app.error(e))),
+                Target::MethodMap(routes) => quote!(#routes),
                 Target::PathMap(routes) => quote!(#routes),
             };
 

@@ -1,8 +1,32 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use http::{Request, Response, StatusCode};
+use http::{Method, Request, Response, StatusCode};
 use mendes::{dispatch, handler, Application, ClientError, Context};
+
+#[tokio::test]
+async fn test_method_get() {
+    let rsp = handle(path_request("/method")).await;
+    assert_eq!(rsp.status(), StatusCode::OK);
+    assert_eq!(rsp.into_body(), "Hello, world");
+}
+
+#[tokio::test]
+async fn test_method_post() {
+    let mut req = path_request("/method/post");
+    *req.method_mut() = Method::POST;
+    let rsp = handle(req).await;
+    assert_eq!(rsp.status(), StatusCode::OK);
+    assert_eq!(rsp.into_body(), "Hello, post");
+}
+
+#[tokio::test]
+async fn test_magic_405() {
+    let mut req = path_request("/method/post");
+    *req.method_mut() = Method::PATCH;
+    let rsp = handle(req).await;
+    assert_eq!(rsp.status(), StatusCode::METHOD_NOT_ALLOWED);
+}
 
 #[tokio::test]
 async fn test_nested_rest() {
@@ -90,6 +114,10 @@ impl Application for App {
                 Some("right") => nested_right,
                 _ => nested_rest,
             },
+            Some("method") => method! {
+                GET => hello,
+                POST => named,
+            }
         }
     }
 
