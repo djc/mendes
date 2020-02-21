@@ -1,8 +1,8 @@
 use std::mem;
 
 use proc_macro::TokenStream;
-use proc_macro2::{Ident, Punct, Spacing, Span};
-use quote::{quote, TokenStreamExt};
+use proc_macro2::{Ident, Span};
+use quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
@@ -199,7 +199,10 @@ impl Parse for Target {
 impl quote::ToTokens for Target {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         match self {
-            Target::Direct(expr) => expr.to_tokens(tokens),
+            Target::Direct(expr) => quote!(
+                #expr(cx).await.unwrap_or_else(|e| app.error(e))
+            )
+            .to_tokens(tokens),
             Target::MethodMap(map) => map.to_tokens(tokens),
             Target::PathMap(map) => map.to_tokens(tokens),
         }
@@ -263,18 +266,7 @@ impl quote::ToTokens for MethodMap {
                 wildcard = true;
             }
 
-            quote!(mendes::http::Method::#component).to_tokens(&mut route_tokens);
-            route_tokens.append(Punct::new('=', Spacing::Joint));
-            route_tokens.append(Punct::new('>', Spacing::Alone));
-
-            let nested = match target {
-                Target::Direct(expr) => quote!(#expr(cx).await.unwrap_or_else(|e| app.error(e))),
-                Target::PathMap(routes) => quote!(#routes),
-                Target::MethodMap(routes) => quote!(#routes),
-            };
-
-            route_tokens.append_all(nested);
-            route_tokens.append(Punct::new(',', Spacing::Alone));
+            quote!(mendes::http::Method::#component => #target,).to_tokens(&mut route_tokens);
         }
 
         if !wildcard {
@@ -300,22 +292,17 @@ impl quote::ToTokens for PathMap {
                 rewind = true;
             }
 
-            component.to_tokens(&mut route_tokens);
-            route_tokens.append(Punct::new('=', Spacing::Joint));
-            route_tokens.append(Punct::new('>', Spacing::Alone));
-
-            let nested = match target {
-                Target::Direct(expr) => quote!(#expr(cx).await.unwrap_or_else(|e| app.error(e))),
-                Target::MethodMap(routes) => quote!(#routes),
-                Target::PathMap(routes) => quote!(#routes),
-            };
-
             if rewind {
-                route_tokens.append_all(quote!({ let mut cx = cx.rewind(); #nested }));
+                quote!(
+                    #component => {
+                        let mut cx = cx.rewind();
+                        #target
+                    }
+                )
+                .to_tokens(&mut route_tokens);
             } else {
-                route_tokens.append_all(nested);
+                quote!(#component => #target,).to_tokens(&mut route_tokens);
             }
-            route_tokens.append(Punct::new(',', Spacing::Alone));
         }
 
         if !wildcard {
