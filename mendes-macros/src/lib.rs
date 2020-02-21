@@ -44,3 +44,9 @@ pub fn dispatch(_: TokenStream, item: TokenStream) -> TokenStream {
     route::dispatch(&mut ast);
     TokenStream::from(ast.to_token_stream())
 }
+
+#[proc_macro_derive(ToField, attributes(option))]
+pub fn derive_to_field(item: TokenStream) -> TokenStream {
+    let ast = syn::parse::<syn::DeriveInput>(item).unwrap();
+    TokenStream::from(forms::to_field(ast))
+}

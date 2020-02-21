@@ -151,6 +151,69 @@ impl Parse for FieldParams {
     }
 }
 
+pub fn to_field(mut ast: syn::DeriveInput) -> proc_macro2::TokenStream {
+    let item = match &mut ast.data {
+        syn::Data::Enum(item) => item,
+        _ => panic!("only enums can derive ToField for now"),
+    };
+
+    let mut options = proc_macro2::TokenStream::new();
+    for variant in item.variants.iter_mut() {
+        match variant.fields {
+            syn::Fields::Unit => {}
+            _ => panic!("only unit variants are supported for now"),
+        };
+
+        let params = if let Some((i, attr)) = variant
+            .attrs
+            .iter_mut()
+            .enumerate()
+            .find(|(_, a)| a.path.is_ident("option"))
+        {
+            let input = mem::replace(&mut attr.tokens, proc_macro2::TokenStream::new());
+            let params = syn::parse2::<FieldParams>(input).unwrap().params;
+            variant.attrs.remove(i);
+            params
+        } else {
+            vec![]
+        };
+
+        let label = params
+            .iter()
+            .find_map(|(key, value)| {
+                if key == "label" {
+                    Some(quote!(Some(#value.into())))
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| quote!(None));
+
+        let name = variant.ident.to_string();
+        options.extend(quote!(
+            mendes::forms::SelectOption {
+                label: #label,
+                value: Some(#name.into()),
+                disabled: false,
+                selected: false,
+                text: #label,
+            },
+        ));
+    }
+
+    let ident = &ast.ident;
+    quote!(
+        impl ToField for #ident {
+            fn to_field(name: Cow<'static, str>, _: &[(&str, &str)]) -> mendes::forms::Field {
+                mendes::forms::Field::Select(mendes::forms::Select {
+                    name,
+                    options: vec![#options],
+                })
+            }
+        }
+    )
+}
+
 fn label(s: &str) -> String {
     let mut new = String::with_capacity(s.len());
     for (i, c) in s.chars().enumerate() {

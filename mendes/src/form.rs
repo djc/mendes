@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::{fmt, str};
 
-pub use mendes_macros::form;
+pub use mendes_macros::{form, ToField};
 
 pub trait ToForm {
     fn to_form() -> Form;
