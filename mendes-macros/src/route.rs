@@ -171,16 +171,16 @@ impl Target {
             _ => return Target::Direct(expr),
         };
 
-        if mac.mac.path.is_ident("path") {
-            Target::Routes(mac.mac.parse_body().unwrap())
-        } else {
-            panic!("unknown macro used as dispatch target")
-        }
+        Self::from_macro(&mac.mac)
     }
 
     fn from_item(expr: &syn::ItemMacro) -> Self {
-        if expr.mac.path.is_ident("path") {
-            Target::Routes(expr.mac.parse_body().unwrap())
+        Self::from_macro(&expr.mac)
+    }
+
+    fn from_macro(mac: &syn::Macro) -> Self {
+        if mac.path.is_ident("path") {
+            Target::Routes(mac.parse_body().unwrap())
         } else {
             panic!("unknown macro used as dispatch target")
         }
