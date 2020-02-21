@@ -203,7 +203,7 @@ impl quote::ToTokens for Target {
 }
 
 struct Map {
-    routes: Vec<Route>,
+    routes: Vec<(syn::Pat, Target)>,
 }
 
 impl Parse for Map {
@@ -216,7 +216,11 @@ impl Parse for Map {
                     break;
                 }
             }
-            routes.push(Route::parse(input)?);
+
+            let component = input.parse()?;
+            input.parse::<syn::Token![=>]>()?;
+            let target = input.parse()?;
+            routes.push((component, target));
         }
         Ok(Map { routes })
     }
@@ -226,18 +230,18 @@ impl quote::ToTokens for Map {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let mut route_tokens = proc_macro2::TokenStream::new();
         let mut wildcard = false;
-        for route in self.routes.iter() {
+        for (component, target) in self.routes.iter() {
             let mut rewind = false;
-            if let syn::Pat::Wild(_) = route.component {
+            if let syn::Pat::Wild(_) = component {
                 wildcard = true;
                 rewind = true;
             }
 
-            route.component.to_tokens(&mut route_tokens);
+            component.to_tokens(&mut route_tokens);
             route_tokens.append(Punct::new('=', Spacing::Joint));
             route_tokens.append(Punct::new('>', Spacing::Alone));
 
-            let nested = match &route.target {
+            let nested = match target {
                 Target::Direct(expr) => quote!(#expr(cx).await.unwrap_or_else(|e| app.error(e))),
                 Target::Routes(routes) => quote!(#routes),
             };
@@ -259,19 +263,5 @@ impl quote::ToTokens for Map {
         tokens.extend(quote!(match cx.next_path() {
             #route_tokens
         }));
-    }
-}
-
-struct Route {
-    component: syn::Pat,
-    target: Target,
-}
-
-impl Parse for Route {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let component = input.parse()?;
-        input.parse::<syn::Token![=>]>()?;
-        let target = input.parse()?;
-        Ok(Route { component, target })
     }
 }
