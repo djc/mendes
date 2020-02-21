@@ -103,6 +103,7 @@ pub enum Field {
     Hidden(Hidden),
     Number(Number),
     Password(Password),
+    Select(Select),
     Submit(Submit),
     Text(Text),
 }
@@ -117,6 +118,7 @@ impl Field {
             Hidden(f) => &f.name,
             Number(f) => &f.name,
             Password(f) => &f.name,
+            Select(f) => &f.name,
             Submit(f) => &f.name,
             Text(f) => &f.name,
         }
@@ -133,6 +135,7 @@ impl fmt::Display for Field {
             Hidden(f) => write!(fmt, "{}", f),
             Number(f) => write!(fmt, "{}", f),
             Password(f) => write!(fmt, "{}", f),
+            Select(f) => write!(fmt, "{}", f),
             Submit(f) => write!(fmt, "{}", f),
             Text(f) => write!(fmt, "{}", f),
         }
@@ -207,6 +210,52 @@ pub struct Password {
 impl fmt::Display for Password {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(fmt, r#"<input type="password" name="{}">"#, self.name)
+    }
+}
+
+pub struct Select {
+    pub name: Cow<'static, str>,
+    pub options: Vec<SelectOption>,
+}
+
+impl fmt::Display for Select {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(fmt, r#"<select name="{}">"#, &self.name)?;
+        for opt in &self.options {
+            write!(fmt, "{}", opt)?;
+        }
+        write!(fmt, "</select>")
+    }
+}
+
+pub struct SelectOption {
+    pub label: Option<Cow<'static, str>>,
+    pub value: Option<Cow<'static, str>>,
+    pub disabled: bool,
+    pub selected: bool,
+    pub text: Option<Cow<'static, str>>,
+}
+
+impl fmt::Display for SelectOption {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(fmt, "<option")?;
+        if let Some(s) = &self.label {
+            write!(fmt, r#" label="{}""#, s)?;
+        }
+        if let Some(s) = &self.value {
+            write!(fmt, r#" value="{}""#, s)?;
+        }
+        if self.disabled {
+            write!(fmt, " disabled")?;
+        }
+        if self.selected {
+            write!(fmt, " selected")?;
+        }
+        if let Some(s) = &self.text {
+            write!(fmt, ">{}</option>", s)
+        } else {
+            write!(fmt, "></option>")
+        }
     }
 }
 
