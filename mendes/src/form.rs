@@ -35,12 +35,16 @@ impl Form {
             .flat_map(|s| &mut s.items)
             .map(|i| &mut i.field)
             .find(|f| f.name() == name);
-        if let Some(Field::Hidden(field)) = field {
-            field.value = Some(value.to_string().into());
-            Ok(self)
-        } else {
-            Err(())
+        match field.ok_or(())? {
+            Field::Hidden(field) => {
+                field.value = Some(value.to_string().into());
+            }
+            Field::Date(field) => {
+                field.value = Some(value.to_string().into());
+            }
+            _ => unimplemented!(),
         }
+        Ok(self)
     }
 }
 
@@ -144,11 +148,16 @@ impl fmt::Display for Field {
 
 pub struct Date {
     pub name: Cow<'static, str>,
+    pub value: Option<Cow<'static, str>>,
 }
 
 impl fmt::Display for Date {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(fmt, r#"<input type="date" name="{}">"#, self.name)
+        write!(fmt, r#"<input type="date" name="{}""#, self.name)?;
+        if let Some(s) = &self.value {
+            write!(fmt, r#" value="{}""#, s)?;
+        }
+        write!(fmt, ">")
     }
 }
 
@@ -350,6 +359,6 @@ impl ToField for f32 {
 #[cfg(feature = "chrono")]
 impl ToField for chrono::NaiveDate {
     fn to_field(name: Cow<'static, str>, _: &[(&str, &str)]) -> Field {
-        Field::Date(Date { name })
+        Field::Date(Date { name, value: None })
     }
 }
