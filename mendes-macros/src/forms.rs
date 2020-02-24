@@ -204,7 +204,7 @@ pub fn to_field(mut ast: syn::DeriveInput) -> proc_macro2::TokenStream {
     let ident = &ast.ident;
     quote!(
         impl ToField for #ident {
-            fn to_field(name: Cow<'static, str>, _: &[(&str, &str)]) -> mendes::forms::Field {
+            fn to_field(name: std::borrow::Cow<'static, str>, _: &[(&str, &str)]) -> mendes::forms::Field {
                 mendes::forms::Field::Select(mendes::forms::Select {
                     name,
                     options: vec![#options],
