@@ -229,33 +229,22 @@ impl fmt::Display for Select {
 }
 
 pub struct SelectOption {
-    pub label: Option<Cow<'static, str>>,
-    pub value: Option<Cow<'static, str>>,
+    pub label: Cow<'static, str>,
+    pub value: Cow<'static, str>,
     pub disabled: bool,
     pub selected: bool,
-    pub text: Option<Cow<'static, str>>,
 }
 
 impl fmt::Display for SelectOption {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(fmt, "<option")?;
-        if let Some(s) = &self.label {
-            write!(fmt, r#" label="{}""#, s)?;
-        }
-        if let Some(s) = &self.value {
-            write!(fmt, r#" value="{}""#, s)?;
-        }
+        write!(fmt, r#"<option value="{}""#, self.value)?;
         if self.disabled {
             write!(fmt, " disabled")?;
         }
         if self.selected {
             write!(fmt, " selected")?;
         }
-        if let Some(s) = &self.text {
-            write!(fmt, ">{}</option>", s)
-        } else {
-            write!(fmt, "></option>")
-        }
+        write!(fmt, ">{}</option>", self.label)
     }
 }
 
