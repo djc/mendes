@@ -178,25 +178,24 @@ pub fn to_field(mut ast: syn::DeriveInput) -> proc_macro2::TokenStream {
             vec![]
         };
 
+        let name = variant.ident.to_string();
         let label = params
             .iter()
             .find_map(|(key, value)| {
                 if key == "label" {
-                    Some(quote!(Some(#value.into())))
+                    Some(quote!(#value.into()))
                 } else {
                     None
                 }
             })
-            .unwrap_or_else(|| quote!(None));
+            .unwrap_or_else(|| quote!(#name));
 
-        let name = variant.ident.to_string();
         options.extend(quote!(
             mendes::forms::SelectOption {
                 label: #label,
-                value: Some(#name.into()),
+                value: #name.into(),
                 disabled: false,
                 selected: false,
-                text: #label,
             },
         ));
     }
