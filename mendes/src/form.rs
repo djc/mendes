@@ -20,31 +20,25 @@ impl Form {
             .sets
             .iter()
             .flat_map(|s| &s.items)
-            .map(|i| &i.field)
-            .find(|f| if let Field::File(_) = f { true } else { false });
-        if multipart.is_some() {
+            .any(|i| i.multipart());
+        if multipart {
             self.enctype = Some("multipart/form-data".into());
         }
         self
     }
 
     pub fn set<T: fmt::Display>(mut self, name: &str, value: T) -> Result<Self, ()> {
-        let field = self
+        let res = self
             .sets
             .iter_mut()
             .flat_map(|s| &mut s.items)
-            .map(|i| &mut i.field)
-            .find(|f| f.name() == name);
-        match field.ok_or(())? {
-            Field::Hidden(field) => {
-                field.value = Some(value.to_string().into());
-            }
-            Field::Date(field) => {
-                field.value = Some(value.to_string().into());
-            }
-            _ => unimplemented!(),
-        }
-        Ok(self)
+            .fold(Err(()), |mut res, item| {
+                if item.set(name, &value).is_ok() {
+                    res = Ok(());
+                }
+                res
+            });
+        res.map(|_| self)
     }
 }
 
@@ -88,15 +82,83 @@ impl fmt::Display for FieldSet {
 
 pub struct Item {
     pub label: Option<Cow<'static, str>>,
-    pub field: Field,
+    pub contents: ItemContents,
+}
+
+impl Item {
+    fn set<T: fmt::Display>(&mut self, name: &str, value: &T) -> Result<(), ()> {
+        match &mut self.contents {
+            ItemContents::Single(f) => {
+                if f.name() == name {
+                    match f {
+                        Field::Hidden(field) => {
+                            field.value = Some(value.to_string().into());
+                            Ok(())
+                        }
+                        Field::Date(field) => {
+                            field.value = Some(value.to_string().into());
+                            Ok(())
+                        }
+                        _ => Err(()),
+                    }
+                } else {
+                    Err(())
+                }
+            }
+            ItemContents::Multi(items) => {
+                let mut found = Err(());
+                for item in items {
+                    if item.set(name, value).is_ok() {
+                        found = Ok(());
+                    }
+                }
+                found
+            }
+        }
+    }
+
+    fn multipart(&self) -> bool {
+        match &self.contents {
+            ItemContents::Single(f) => match f {
+                Field::File(_) => true,
+                _ => false,
+            },
+            ItemContents::Multi(items) => items.iter().any(|i| i.multipart()),
+        }
+    }
 }
 
 impl fmt::Display for Item {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(s) = &self.label {
-            write!(fmt, r#"<label for="{}">{}</label>"#, self.field.name(), s)?;
+        write!(fmt, "<label")?;
+        if let ItemContents::Single(f) = &self.contents {
+            write!(fmt, r#" for="{}""#, f.name())?;
         }
-        write!(fmt, "{}", self.field)
+        if let Some(s) = &self.label {
+            write!(fmt, r#">{}</label>{}"#, s, self.contents)
+        } else {
+            write!(fmt, r#"></label>{}"#, self.contents)
+        }
+    }
+}
+
+pub enum ItemContents {
+    Single(Field),
+    Multi(Vec<Item>),
+}
+
+impl fmt::Display for ItemContents {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ItemContents::Single(f) => write!(fmt, "{}", f),
+            ItemContents::Multi(items) => {
+                write!(fmt, r#"<div class="compound-item">"#)?;
+                for item in items {
+                    write!(fmt, "{}", item)?;
+                }
+                write!(fmt, "</div>")
+            }
+        }
     }
 }
 

@@ -12,6 +12,7 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
         _ => panic!("only structs with named fields are supported"),
     };
 
+    let mut item_state = None;
     let mut new = proc_macro2::TokenStream::new();
     for field in fields.named.iter_mut() {
         let name = field.ident.as_ref().unwrap().to_string();
@@ -19,6 +20,7 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
             let label = syn::LitStr::new(&label(&name), Span::call_site());
             quote!(Some(#label.into()))
         };
+        let mut item = None;
 
         let params = if let Some((i, attr)) = field
             .attrs
@@ -33,6 +35,8 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
                     label = quote!(None);
                 } else if key == "label" {
                     label = quote!(Some(#value.into()));
+                } else if key == "item" {
+                    item = Some(value.clone());
                 }
                 tokens.extend(quote!(
                     (#key, #value),
@@ -45,22 +49,60 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
         };
 
         let ty = &field.ty;
-        new.extend(quote!(
+        let tokens = quote!(
             mendes::forms::Item {
                 label: #label,
-                field: <#ty as mendes::forms::ToField>::to_field(#name.into(), &[#params]),
+                contents: mendes::forms::ItemContents::Single(
+                    <#ty as mendes::forms::ToField>::to_field(#name.into(), &[#params])
+                ),
             },
-        ));
+        );
+
+        item_state = match item_state {
+            None if item.is_none() => {
+                new.extend(tokens);
+                None
+            }
+            None => Some((item.unwrap(), tokens)),
+            Some((name, mut items)) => match item {
+                Some(cur) if cur == name => {
+                    items.extend(tokens);
+                    Some((name, items))
+                }
+                Some(cur) => {
+                    let label = syn::LitStr::new(&name, Span::call_site());
+                    new.extend(quote!(
+                        mendes::forms::Item {
+                            label: Some(#label.into()),
+                            contents: mendes::forms::ItemContents::Multi(vec![#items]),
+                        },
+                    ));
+                    Some((cur, tokens))
+                }
+                None => {
+                    let label = syn::LitStr::new(&name, Span::call_site());
+                    new.extend(quote!(
+                        mendes::forms::Item {
+                            label: Some(#label.into()),
+                            contents: mendes::forms::ItemContents::Multi(vec![#items]),
+                        },
+                    ));
+                    None
+                }
+            },
+        }
     }
 
     let submit = syn::LitStr::new(&meta.submit, Span::call_site());
     new.extend(quote!(
         mendes::forms::Item {
             label: None,
-            field: mendes::forms::Field::Submit(mendes::forms::Submit {
-                name: "submit".into(),
-                value: #submit.into(),
-            }),
+            contents: mendes::forms::ItemContents::Single(
+                mendes::forms::Field::Submit(mendes::forms::Submit {
+                    name: "submit".into(),
+                    value: #submit.into(),
+                })
+            ),
         },
     ));
 
