@@ -1,6 +1,6 @@
 [package]
 name = "mendes-macros"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
 description = "Macros for mendes web toolkit"
 documentation = "https://docs.rs/mendes-macros"
