@@ -99,6 +99,16 @@ impl Item {
                             field.value = Some(value.to_string().into());
                             Ok(())
                         }
+                        Field::Select(field) => {
+                            let val = value.to_string();
+                            for option in &mut field.options {
+                                if option.value == val {
+                                    option.selected = true;
+                                    return Ok(());
+                                }
+                            }
+                            Err(())
+                        }
                         _ => Err(()),
                     }
                 } else {
