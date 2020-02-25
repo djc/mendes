@@ -173,6 +173,7 @@ impl fmt::Display for ItemContents {
 }
 
 pub enum Field {
+    Checkbox(Checkbox),
     Date(Date),
     Email(Email),
     File(FileInput),
@@ -188,6 +189,7 @@ impl Field {
     pub fn name(&self) -> &str {
         use Field::*;
         match self {
+            Checkbox(f) => &f.name,
             Date(f) => &f.name,
             Email(f) => &f.name,
             File(f) => &f.name,
@@ -205,6 +207,7 @@ impl fmt::Display for Field {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         use Field::*;
         match self {
+            Checkbox(f) => write!(fmt, "{}", f),
             Date(f) => write!(fmt, "{}", f),
             Email(f) => write!(fmt, "{}", f),
             File(f) => write!(fmt, "{}", f),
@@ -215,6 +218,21 @@ impl fmt::Display for Field {
             Submit(f) => write!(fmt, "{}", f),
             Text(f) => write!(fmt, "{}", f),
         }
+    }
+}
+
+pub struct Checkbox {
+    pub name: Cow<'static, str>,
+    pub value: Option<Cow<'static, str>>,
+}
+
+impl fmt::Display for Checkbox {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(fmt, r#"<input type="checkbox" name="{}""#, self.name)?;
+        if self.value.is_some() {
+            write!(fmt, " checked")?;
+        }
+        write!(fmt, ">")
     }
 }
 
@@ -356,6 +374,12 @@ impl fmt::Display for Text {
 
 pub trait ToField {
     fn to_field(name: Cow<'static, str>, params: &[(&str, &str)]) -> Field;
+}
+
+impl ToField for bool {
+    fn to_field(name: Cow<'static, str>, _: &[(&str, &str)]) -> Field {
+        Field::Checkbox(Checkbox { name, value: None })
+    }
 }
 
 impl ToField for Cow<'_, str> {
