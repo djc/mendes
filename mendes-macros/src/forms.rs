@@ -230,7 +230,7 @@ pub fn to_field(mut ast: syn::DeriveInput) -> proc_macro2::TokenStream {
                     None
                 }
             })
-            .unwrap_or_else(|| quote!(#name));
+            .unwrap_or_else(|| quote!(#name.into()));
 
         options.extend(quote!(
             mendes::forms::SelectOption {
