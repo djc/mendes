@@ -23,7 +23,7 @@ with-hyper = ["bytes", "futures-util", "hyper"]
 async-trait = "0.1.24"
 bincode = { version = "1.2.1", optional = true }
 bytes = { version = "0.5.4", optional = true }
-chrono = { version = "0.4.10", optional = true }
+chrono = { version = "0.4.10", optional = true, features = ["serde"] }
 data-encoding = { version = "2.1.2", optional = true }
 futures-util = { version = "0.3.4", optional = true }
 http = "0.2"
