@@ -12,9 +12,26 @@ fn test_generate() {
     let _ = form.to_string();
 }
 
+#[test]
+fn test_roundtrip() {
+    let obj = SomeForm {
+        name: "name".into(),
+        amount: 1,
+        rate: 2.0,
+        byte: 3,
+        test: true,
+        options: Options::Straight,
+        #[cfg(feature = "chrono")]
+        date: chrono::Utc::today().naive_utc(),
+    };
+    let s = serde_urlencoded::to_string(&obj).unwrap();
+    let decoded = serde_urlencoded::from_bytes(s.as_bytes()).unwrap();
+    assert_eq!(obj, decoded);
+}
+
 #[allow(dead_code)]
 #[form(action = "/assets/new", submit = "Create")]
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 struct SomeForm<'a> {
     name: Cow<'a, str>,
     amount: u32,
@@ -25,10 +42,10 @@ struct SomeForm<'a> {
     #[form(item = "Group")]
     options: Options,
     #[cfg(feature = "chrono")]
-    outstanding_principal_date: chrono::NaiveDate,
+    date: chrono::NaiveDate,
 }
 
-#[derive(Deserialize, Serialize, ToField)]
+#[derive(Debug, Deserialize, Serialize, ToField, PartialEq)]
 enum Options {
     Straight,
     #[option(label = "Relabeled")]
