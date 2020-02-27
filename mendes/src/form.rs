@@ -426,7 +426,10 @@ pub trait ToField {
 
 impl ToField for bool {
     fn to_field(name: Cow<'static, str>, _: &[(&str, &str)]) -> Field {
-        Field::Checkbox(Checkbox { name, checked: false })
+        Field::Checkbox(Checkbox {
+            name,
+            checked: false,
+        })
     }
 }
 
