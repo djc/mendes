@@ -91,17 +91,41 @@ impl Item {
             ItemContents::Single(f) => {
                 if f.name() == name {
                     match f {
-                        Field::Hidden(field) => {
-                            field.value = Some(value.to_string().into());
+                        Field::Checkbox(f) => {
+                            let s = value.to_string();
+                            if s == "true" || s == "1" {
+                                f.checked = true;
+                                Ok(())
+                            } else if s == "false" || s == "0" {
+                                f.checked = false;
+                                Ok(())
+                            } else {
+                                Err(())
+                            }
+                        }
+                        Field::Date(f) => {
+                            f.value = Some(value.to_string().into());
                             Ok(())
                         }
-                        Field::Date(field) => {
-                            field.value = Some(value.to_string().into());
+                        Field::Email(f) => {
+                            f.value = Some(value.to_string().into());
                             Ok(())
                         }
-                        Field::Select(field) => {
+                        Field::Hidden(f) => {
+                            f.value = Some(value.to_string().into());
+                            Ok(())
+                        }
+                        Field::Number(f) => {
+                            f.value = Some(value.to_string().into());
+                            Ok(())
+                        }
+                        Field::Password(f) => {
+                            f.value = Some(value.to_string().into());
+                            Ok(())
+                        }
+                        Field::Select(f) => {
                             let val = value.to_string();
-                            for option in &mut field.options {
+                            for option in &mut f.options {
                                 if option.value == val {
                                     option.selected = true;
                                     return Ok(());
@@ -109,7 +133,11 @@ impl Item {
                             }
                             Err(())
                         }
-                        _ => Err(()),
+                        Field::Text(f) => {
+                            f.value = Some(value.to_string().into());
+                            Ok(())
+                        }
+                        Field::File(_) | Field::Submit(_) => Err(()),
                     }
                 } else {
                     Err(())
@@ -223,13 +251,13 @@ impl fmt::Display for Field {
 
 pub struct Checkbox {
     pub name: Cow<'static, str>,
-    pub value: Option<Cow<'static, str>>,
+    pub checked: bool,
 }
 
 impl fmt::Display for Checkbox {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(fmt, r#"<input type="checkbox" name="{}""#, self.name)?;
-        if self.value.is_some() {
+        if self.checked {
             write!(fmt, " checked")?;
         }
         write!(fmt, ">")
@@ -253,11 +281,16 @@ impl fmt::Display for Date {
 
 pub struct Email {
     pub name: Cow<'static, str>,
+    pub value: Option<Cow<'static, str>>,
 }
 
 impl fmt::Display for Email {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(fmt, r#"<input type="email" name="{}">"#, self.name)
+        write!(fmt, r#"<input type="email" name="{}""#, self.name)?;
+        if let Some(s) = &self.value {
+            write!(fmt, r#" value="{}""#, s)?;
+        }
+        write!(fmt, ">")
     }
 }
 
@@ -294,21 +327,31 @@ impl fmt::Display for Hidden {
 
 pub struct Number {
     pub name: Cow<'static, str>,
+    pub value: Option<Cow<'static, str>>,
 }
 
 impl fmt::Display for Number {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(fmt, r#"<input type="number" name="{}">"#, self.name)
+        write!(fmt, r#"<input type="number" name="{}""#, self.name)?;
+        if let Some(s) = &self.value {
+            write!(fmt, r#" value="{}""#, s)?;
+        }
+        write!(fmt, ">")
     }
 }
 
 pub struct Password {
     pub name: Cow<'static, str>,
+    pub value: Option<Cow<'static, str>>,
 }
 
 impl fmt::Display for Password {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(fmt, r#"<input type="password" name="{}">"#, self.name)
+        write!(fmt, r#"<input type="password" name="{}""#, self.name)?;
+        if let Some(s) = &self.value {
+            write!(fmt, r#" value="{}""#, s)?;
+        }
+        write!(fmt, ">")
     }
 }
 
@@ -364,11 +407,16 @@ impl fmt::Display for Submit {
 
 pub struct Text {
     pub name: Cow<'static, str>,
+    pub value: Option<Cow<'static, str>>,
 }
 
 impl fmt::Display for Text {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(fmt, r#"<input type="text" name="{}">"#, self.name)
+        write!(fmt, r#"<input type="text" name="{}""#, self.name)?;
+        if let Some(s) = &self.value {
+            write!(fmt, r#" value="{}""#, s)?;
+        }
+        write!(fmt, ">")
     }
 }
 
@@ -378,7 +426,7 @@ pub trait ToField {
 
 impl ToField for bool {
     fn to_field(name: Cow<'static, str>, _: &[(&str, &str)]) -> Field {
-        Field::Checkbox(Checkbox { name, value: None })
+        Field::Checkbox(Checkbox { name, checked: false })
     }
 }
 
@@ -387,13 +435,13 @@ impl ToField for Cow<'_, str> {
         for (key, value) in params {
             if *key == "type" {
                 if *value == "email" {
-                    return Field::Email(Email { name });
+                    return Field::Email(Email { name, value: None });
                 } else if *value == "password" {
-                    return Field::Password(Password { name });
+                    return Field::Password(Password { name, value: None });
                 }
             }
         }
-        Field::Text(Text { name })
+        Field::Text(Text { name, value: None })
     }
 }
 
@@ -404,7 +452,7 @@ impl ToField for u8 {
                 return Field::Hidden(Hidden::from_params(name, params));
             }
         }
-        Field::Number(Number { name })
+        Field::Number(Number { name, value: None })
     }
 }
 
@@ -415,7 +463,7 @@ impl ToField for u16 {
                 return Field::Hidden(Hidden::from_params(name, params));
             }
         }
-        Field::Number(Number { name })
+        Field::Number(Number { name, value: None })
     }
 }
 
@@ -426,7 +474,7 @@ impl ToField for u32 {
                 return Field::Hidden(Hidden::from_params(name, params));
             }
         }
-        Field::Number(Number { name })
+        Field::Number(Number { name, value: None })
     }
 }
 
@@ -437,7 +485,7 @@ impl ToField for i32 {
                 return Field::Hidden(Hidden::from_params(name, params));
             }
         }
-        Field::Number(Number { name })
+        Field::Number(Number { name, value: None })
     }
 }
 
@@ -448,7 +496,7 @@ impl ToField for f32 {
                 return Field::Hidden(Hidden::from_params(name, params));
             }
         }
-        Field::Number(Number { name })
+        Field::Number(Number { name, value: None })
     }
 }
 
