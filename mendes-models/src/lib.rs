@@ -87,11 +87,45 @@ impl ToColumn<Serial<i32>> for PostgreSQL {
     }
 }
 
+impl ToColumn<i32> for PostgreSQL {
+    fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
+        Column {
+            name,
+            ty: "integer".into(),
+            null: false,
+            default: None,
+        }
+    }
+}
+
+impl ToColumn<i64> for PostgreSQL {
+    fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
+        Column {
+            name,
+            ty: "bigint".into(),
+            null: false,
+            default: None,
+        }
+    }
+}
+
 impl ToColumn<String> for PostgreSQL {
     fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
         Column {
             name,
             ty: "text".into(),
+            null: false,
+            default: None,
+        }
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl ToColumn<chrono::NaiveDate> for PostgreSQL {
+    fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
+        Column {
+            name,
+            ty: "date".into(),
             null: false,
             default: None,
         }

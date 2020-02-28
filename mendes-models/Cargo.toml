@@ -5,4 +5,5 @@ authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
 edition = "2018"
 
 [dependencies]
+chrono = { version = "0.4.10", optional = true }
 mendes-macros = { version = "0.0.17", path = "../mendes-macros" }
