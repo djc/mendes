@@ -9,12 +9,14 @@ use serde::{Deserialize, Serialize};
 fn test_generate() {
     let form = SomeForm::to_form();
     let form = form.set("name", "hi").unwrap();
-    let _ = form.to_string();
+    let html = form.to_string();
+    assert!(!html.contains("skipped"));
 }
 
 #[test]
 fn test_roundtrip() {
     let obj = SomeForm {
+        skipped: 0,
         name: "name".into(),
         amount: 1,
         rate: 2.0,
@@ -33,6 +35,8 @@ fn test_roundtrip() {
 #[form(action = "/assets/new", submit = "Create")]
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 struct SomeForm<'a> {
+    #[form(skip)]
+    skipped: u8,
     name: Cow<'a, str>,
     amount: u32,
     rate: f32,

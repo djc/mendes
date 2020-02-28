@@ -21,6 +21,7 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
             quote!(Some(#label.into()))
         };
         let mut item = None;
+        let mut skip = false;
 
         let params = if let Some((i, attr)) = field
             .attrs
@@ -37,6 +38,8 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
                     label = quote!(Some(#value.into()));
                 } else if key == "item" {
                     item = Some(value.clone());
+                } else if key == "skip" {
+                    skip = true;
                 }
                 tokens.extend(quote!(
                     (#key, #value),
@@ -47,6 +50,10 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
         } else {
             quote!()
         };
+
+        if skip {
+            continue;
+        }
 
         let ty = &field.ty;
         let tokens = quote!(
@@ -179,13 +186,18 @@ impl Parse for FieldParams {
 
         let mut params = vec![];
         for meta in metas {
-            if let syn::NestedMeta::Meta(syn::Meta::NameValue(pair)) = meta {
-                let key = pair.path.get_ident().unwrap().to_string();
-                let value = pair.lit.into_token_stream().to_string();
-                let value = value.trim_matches('"').to_string();
-                params.push((key, value))
-            } else {
-                unreachable!()
+            match meta {
+                syn::NestedMeta::Meta(syn::Meta::NameValue(pair)) => {
+                    let key = pair.path.get_ident().unwrap().to_string();
+                    let value = pair.lit.into_token_stream().to_string();
+                    let value = value.trim_matches('"').to_string();
+                    params.push((key, value))
+                }
+                syn::NestedMeta::Meta(syn::Meta::Path(path)) => {
+                    let key = path.get_ident().unwrap().to_string();
+                    params.push((key, "true".into()));
+                }
+                _ => unimplemented!(),
             }
         }
 
