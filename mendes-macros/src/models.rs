@@ -16,24 +16,35 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
         quote!(mendes_models)
     };
 
-    let mut bounds = HashSet::new();
-    bounds.insert(quote!(#models_path::System).to_string());
-    let mut columns = proc_macro2::TokenStream::new();
-    for field in fields.named.iter_mut() {
-        let name = field.ident.as_ref().unwrap().to_string();
-        let ty = &field.ty;
-        bounds.insert(quote!(#models_path::ToColumn<#ty>).to_string());
-        columns.extend(quote!(
-            <Sys as #models_path::ToColumn<#ty>>::to_column(#name.into(), &[]),
-        ));
-    }
-
     let name = &ast.ident;
     let mut table_name = name.to_string().to_lowercase();
     if table_name.ends_with('s') {
         table_name.push_str("es");
     } else {
         table_name.push('s');
+    }
+
+    let mut bounds = HashSet::new();
+    bounds.insert(quote!(#models_path::System).to_string());
+    let mut columns = proc_macro2::TokenStream::new();
+    let mut constraints = proc_macro2::TokenStream::new();
+    for field in fields.named.iter_mut() {
+        let name = field.ident.as_ref().unwrap().to_string();
+        if name == "id" {
+            let cname = format!("{}_pkey", table_name);
+            constraints.extend(quote!(
+                #models_path::Constraint::PrimaryKey {
+                    name: #cname.into(),
+                    columns: vec!["id".into()],
+                },
+            ));
+        }
+
+        let ty = &field.ty;
+        bounds.insert(quote!(#models_path::ToColumn<#ty>).to_string());
+        columns.extend(quote!(
+            <Sys as #models_path::ToColumn<#ty>>::to_column(#name.into(), &[]),
+        ));
     }
 
     let mut generics = ast.generics.clone();
@@ -68,7 +79,7 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
                 #models_path::Table {
                     name: #table_name.into(),
                     columns: vec![#columns],
-                    constraints: vec![],
+                    constraints: vec![#constraints],
                 }
             }
         }

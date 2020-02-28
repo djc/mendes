@@ -60,7 +60,7 @@ impl fmt::Display for Constraint {
                     }
                     write!(fmt, "{}", col)?;
                 }
-                Ok(())
+                write!(fmt, ")")
             }
         }
     }

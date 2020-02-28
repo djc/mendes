@@ -6,7 +6,7 @@ fn test_model() {
     let sql = table.to_string();
     assert_eq!(
         sql,
-        "CREATE TABLE nameds (id serial NOT NULL, name text NOT NULL)"
+        "CREATE TABLE nameds (id serial NOT NULL, name text NOT NULL, CONSTRAINT nameds_pkey PRIMARY KEY (id))"
     );
 }
 
