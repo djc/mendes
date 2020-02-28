@@ -5,6 +5,7 @@ use quote::ToTokens;
 
 mod cookies;
 mod forms;
+mod models;
 mod route;
 
 #[proc_macro_attribute]
@@ -49,4 +50,15 @@ pub fn dispatch(_: TokenStream, item: TokenStream) -> TokenStream {
 pub fn derive_to_field(item: TokenStream) -> TokenStream {
     let ast = syn::parse::<syn::DeriveInput>(item).unwrap();
     TokenStream::from(forms::to_field(ast))
+}
+
+#[proc_macro_attribute]
+pub fn model(_: TokenStream, item: TokenStream) -> TokenStream {
+    let mut ast = syn::parse::<syn::ItemStruct>(item).unwrap();
+
+    let impls = models::model(&mut ast);
+
+    let mut tokens = ast.to_token_stream();
+    tokens.extend(impls);
+    TokenStream::from(tokens)
 }

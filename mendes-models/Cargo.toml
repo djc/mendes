@@ -1,0 +1,8 @@
+[package]
+name = "mendes-models"
+version = "0.0.1"
+authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
+edition = "2018"
+
+[dependencies]
+mendes-macros = { version = "0.0.17", path = "../mendes-macros" }

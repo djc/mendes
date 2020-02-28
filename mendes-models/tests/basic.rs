@@ -1,0 +1,18 @@
+use mendes_models::{model, PostgreSQL, Serial, System};
+
+#[test]
+fn test_model() {
+    let table = PostgreSQL::table::<Named>();
+    let sql = table.to_string();
+    assert_eq!(
+        sql,
+        "CREATE TABLE nameds (id serial NOT NULL, name text NOT NULL)"
+    );
+}
+
+#[allow(dead_code)]
+#[model]
+struct Named {
+    id: Serial<i32>,
+    name: String,
+}

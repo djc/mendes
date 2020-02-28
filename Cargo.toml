@@ -1,2 +1,2 @@
 [workspace]
-members = ["mendes", "mendes-macros"]
+members = ["mendes", "mendes-macros", "mendes-models"]
