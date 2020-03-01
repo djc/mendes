@@ -2,8 +2,13 @@
 name = "mendes-models"
 version = "0.0.1"
 authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
+description = "Models for mendes web toolkit"
+documentation = "https://docs.rs/mendes-models"
+repository = "https://github.com/djc/mendes"
+license = "MIT OR Apache-2.0"
+workspace = ".."
 edition = "2018"
 
 [dependencies]
 chrono = { version = "0.4.10", optional = true }
-mendes-macros = { version = "0.0.17", path = "../mendes-macros" }
+mendes-macros = { version = "0.0.18", path = "../mendes-macros" }

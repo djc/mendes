@@ -1,6 +1,6 @@
 [package]
 name = "mendes"
-version = "0.0.20"
+version = "0.0.21"
 authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
 description = "Rust web toolkit for impatient perfectionists"
 documentation = "https://docs.rs/mendes"
@@ -17,6 +17,7 @@ cookies = ["bincode", "data-encoding", "ring", "serde/derive"]
 forms = ["serde_urlencoded", "serde/derive"]
 json = ["serde_json"]
 uploads = ["httparse", "twoway"]
+with-chrono = ["chrono", "mendes-models/chrono"]
 with-hyper = ["bytes", "futures-util", "hyper"]
 
 [dependencies]
@@ -29,7 +30,8 @@ futures-util = { version = "0.3.4", optional = true }
 http = "0.2"
 httparse = { version = "1.3.4", optional = true }
 hyper = { version = "0.13.2", optional = true }
-mendes-macros = { version = "0.0.17", path = "../mendes-macros" }
+mendes-macros = { version = "0.0.18", path = "../mendes-macros" }
+mendes-models = { version = "0.0.1", path = "../mendes-models", optional = true }
 ring = { version = "0.16.11", optional = true }
 serde = "1.0.104"
 serde_json = { version = "1.0.48", optional = true }
