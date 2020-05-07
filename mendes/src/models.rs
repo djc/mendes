@@ -1,7 +1,8 @@
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::fmt;
 
-pub use mendes_macros::model;
+pub use mendes_macros::{model, model_type};
 
 pub struct Table {
     pub name: Cow<'static, str>,
@@ -11,6 +12,15 @@ pub struct Table {
 
 impl fmt::Display for Table {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut defined = HashSet::new();
+        for col in self.columns.iter() {
+            if let Some(def) = &col.type_def {
+                if defined.insert(&col.ty) {
+                    write!(fmt, "{}; ", def)?;
+                }
+            }
+        }
+
         write!(fmt, "CREATE TABLE {} (", self.name)?;
         for (i, col) in self.columns.iter().enumerate() {
             if i > 0 {
@@ -30,6 +40,7 @@ pub struct Column {
     pub ty: Cow<'static, str>,
     pub null: bool,
     pub default: Option<Cow<'static, str>>,
+    pub type_def: Option<Cow<'static, str>>,
 }
 
 impl fmt::Display for Column {
@@ -68,6 +79,39 @@ impl fmt::Display for Constraint {
 
 pub struct Serial<T>(T);
 
+pub trait EnumType {
+    const NAME: &'static str;
+    const VARIANTS: &'static [&'static str];
+}
+
+impl<T> ToColumn<T> for PostgreSQL
+where
+    T: EnumType,
+{
+    fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
+        let ty_name = T::NAME;
+
+        let variants = T::VARIANTS;
+        let mut variant_str = String::new();
+        for (i, variant) in variants.iter().enumerate() {
+            variant_str.push('\'');
+            variant_str.push_str(variant);
+            variant_str.push('\'');
+            if i != variants.len() - 1 {
+                variant_str.push_str(", ");
+            }
+        }
+
+        Column {
+            name,
+            ty: ty_name.into(),
+            null: false,
+            default: None,
+            type_def: Some(format!("CREATE TYPE {} AS ENUM({})", ty_name, variant_str).into()),
+        }
+    }
+}
+
 pub trait Model<S: System> {
     fn table() -> Table;
 }
@@ -83,6 +127,7 @@ impl ToColumn<Serial<i32>> for PostgreSQL {
             ty: "serial".into(),
             null: false,
             default: None,
+            type_def: None,
         }
     }
 }
@@ -94,6 +139,7 @@ impl ToColumn<i32> for PostgreSQL {
             ty: "integer".into(),
             null: false,
             default: None,
+            type_def: None,
         }
     }
 }
@@ -105,6 +151,7 @@ impl ToColumn<i64> for PostgreSQL {
             ty: "bigint".into(),
             null: false,
             default: None,
+            type_def: None,
         }
     }
 }
@@ -116,6 +163,7 @@ impl ToColumn<String> for PostgreSQL {
             ty: "text".into(),
             null: false,
             default: None,
+            type_def: None,
         }
     }
 }
@@ -128,6 +176,7 @@ impl ToColumn<chrono::NaiveDate> for PostgreSQL {
             ty: "date".into(),
             null: false,
             default: None,
+            type_def: None,
         }
     }
 }

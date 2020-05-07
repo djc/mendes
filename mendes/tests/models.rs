@@ -1,5 +1,5 @@
 #![cfg(feature = "models")]
-use mendes::models::{model, PostgreSQL, Serial, System};
+use mendes::models::{model, model_type, PostgreSQL, Serial, System};
 
 #[test]
 fn test_model() {
@@ -7,7 +7,14 @@ fn test_model() {
     let sql = table.to_string();
     assert_eq!(
         sql,
-        "CREATE TABLE nameds (id serial NOT NULL, name text NOT NULL, num bigint NOT NULL, CONSTRAINT nameds_pkey PRIMARY KEY (id))"
+        "CREATE TYPE Foo AS ENUM('Bar', 'Baz'); \
+         CREATE TABLE nameds (\
+             id serial NOT NULL, \
+             name text NOT NULL, \
+             num bigint NOT NULL, \
+             foo Foo NOT NULL, \
+             CONSTRAINT nameds_pkey PRIMARY KEY (id)\
+         )"
     );
 }
 
@@ -17,4 +24,12 @@ struct Named {
     id: Serial<i32>,
     name: String,
     num: i64,
+    foo: Foo,
+}
+
+#[allow(dead_code)]
+#[model_type]
+enum Foo {
+    Bar,
+    Baz,
 }

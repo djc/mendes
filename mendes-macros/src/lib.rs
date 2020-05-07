@@ -62,3 +62,14 @@ pub fn model(_: TokenStream, item: TokenStream) -> TokenStream {
     tokens.extend(impls);
     TokenStream::from(tokens)
 }
+
+#[proc_macro_attribute]
+pub fn model_type(_: TokenStream, item: TokenStream) -> TokenStream {
+    let mut ast = syn::parse::<syn::Item>(item).unwrap();
+
+    let impls = models::model_type(&mut ast);
+
+    let mut tokens = ast.to_token_stream();
+    tokens.extend(impls);
+    TokenStream::from(tokens)
+}

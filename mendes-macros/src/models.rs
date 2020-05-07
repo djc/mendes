@@ -81,3 +81,27 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
 
     impls
 }
+
+pub fn model_type(ast: &mut syn::Item) -> proc_macro2::TokenStream {
+    let ty = match ast {
+        syn::Item::Enum(e) => e,
+        _ => panic!("only enums are supported for now"),
+    };
+
+    let mut variants = proc_macro2::TokenStream::new();
+    for variant in &ty.variants {
+        let name = variant.ident.to_string();
+        variants.extend(quote!(#name, ));
+    }
+
+    let name = &ty.ident;
+    let name_str = name.to_string();
+    let (impl_generics, type_generics, where_clause) = ty.generics.split_for_impl();
+
+    quote!(
+        impl#impl_generics mendes::models::EnumType for #name#type_generics #where_clause {
+            const NAME: &'static str = #name_str;
+            const VARIANTS: &'static [&'static str] = &[#variants];
+        }
+    )
+}
