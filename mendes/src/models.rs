@@ -120,6 +120,18 @@ pub trait ToColumn<T>: System {
     fn to_column(name: Cow<'static, str>, params: &[(&str, &str)]) -> Column;
 }
 
+impl ToColumn<bool> for PostgreSQL {
+    fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
+        Column {
+            name,
+            ty: "boolean".into(),
+            null: false,
+            default: None,
+            type_def: None,
+        }
+    }
+}
+
 impl ToColumn<Serial<i32>> for PostgreSQL {
     fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
         Column {
