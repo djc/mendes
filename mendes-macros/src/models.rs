@@ -96,11 +96,17 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
 }
 
 pub fn model_type(ast: &mut syn::Item) -> proc_macro2::TokenStream {
-    let ty = match ast {
-        syn::Item::Enum(e) => e,
-        _ => panic!("only enums are supported for now"),
-    };
+    match ast {
+        syn::Item::Enum(e) => enum_type(e),
+        syn::Item::Struct(s) => match &s.fields {
+            syn::Fields::Unnamed(f) if f.unnamed.len() == 1 => newtype_type(s),
+            _ => panic!("unsupported type for model type"),
+        },
+        _ => panic!("unsupported type for model type"),
+    }
+}
 
+fn enum_type(ty: &syn::ItemEnum) -> proc_macro2::TokenStream {
     let mut variants = proc_macro2::TokenStream::new();
     for variant in &ty.variants {
         let name = variant.ident.to_string();
@@ -115,6 +121,27 @@ pub fn model_type(ast: &mut syn::Item) -> proc_macro2::TokenStream {
         impl#impl_generics mendes::models::EnumType for #name#type_generics #where_clause {
             const NAME: &'static str = #name_str;
             const VARIANTS: &'static [&'static str] = &[#variants];
+        }
+    )
+}
+
+fn newtype_type(ty: &syn::ItemStruct) -> proc_macro2::TokenStream {
+    let name = &ty.ident;
+    let wrapped = if let syn::Fields::Unnamed(fu) = &ty.fields {
+        &fu.unnamed.first().unwrap().ty
+    } else {
+        panic!("invalid");
+    };
+
+    quote!(
+        impl<Sys> mendes::models::ToColumn<Sys> for #name
+        where
+            Sys: mendes::models::System,
+            #wrapped: mendes::models::ToColumn<Sys>,
+        {
+            fn to_column(name: std::borrow::Cow<'static, str>, data: &[(&str, &str)]) -> mendes::models::Column {
+                #wrapped::to_column(name, data)
+            }
         }
     )
 }

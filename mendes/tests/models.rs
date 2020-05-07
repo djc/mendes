@@ -13,6 +13,7 @@ fn test_model() {
              name text NOT NULL, \
              num bigint NOT NULL, \
              foo Foo NOT NULL, \
+             wrap integer NOT NULL, \
              CONSTRAINT nameds_pkey PRIMARY KEY (id)\
          )"
     );
@@ -25,6 +26,7 @@ struct Named {
     name: String,
     num: i64,
     foo: Foo,
+    wrap: Wrap,
 }
 
 #[allow(dead_code)]
@@ -33,3 +35,6 @@ enum Foo {
     Bar,
     Baz,
 }
+
+#[model_type]
+struct Wrap(i32);
