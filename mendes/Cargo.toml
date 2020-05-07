@@ -16,7 +16,7 @@ readme = "../README.md"
 cookies = ["bincode", "data-encoding", "ring", "serde/derive"]
 forms = ["serde_urlencoded", "serde/derive"]
 json = ["serde_json"]
-models = []
+models = ["serde/derive"]
 uploads = ["httparse", "twoway"]
 with-hyper = ["bytes", "futures-util", "hyper"]
 

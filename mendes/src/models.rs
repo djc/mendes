@@ -2,6 +2,8 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 pub use mendes_macros::{model, model_type};
 
 pub struct Table {
@@ -77,6 +79,7 @@ impl fmt::Display for Constraint {
     }
 }
 
+#[derive(Deserialize, Serialize)]
 pub struct Serial<T>(T);
 
 pub trait EnumType {
