@@ -1,4 +1,5 @@
-use mendes_models::{model, PostgreSQL, Serial, System};
+#![cfg(feature = "models")]
+use mendes::models::{model, PostgreSQL, Serial, System};
 
 #[test]
 fn test_model() {

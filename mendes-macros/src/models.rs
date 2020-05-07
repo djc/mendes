@@ -10,12 +10,6 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
         _ => panic!("only structs with named fields are supported"),
     };
 
-    let models_path = if cfg!(feature = "path-mendes") {
-        quote!(mendes::models)
-    } else {
-        quote!(mendes_models)
-    };
-
     let name = &ast.ident;
     let mut table_name = name.to_string().to_lowercase();
     if table_name.ends_with('s') {
@@ -25,7 +19,7 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
     }
 
     let mut bounds = HashSet::new();
-    bounds.insert(quote!(#models_path::System).to_string());
+    bounds.insert(quote!(mendes::models::System).to_string());
     let mut columns = proc_macro2::TokenStream::new();
     let mut constraints = proc_macro2::TokenStream::new();
     for field in fields.named.iter_mut() {
@@ -33,7 +27,7 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
         if name == "id" {
             let cname = format!("{}_pkey", table_name);
             constraints.extend(quote!(
-                #models_path::Constraint::PrimaryKey {
+                mendes::models::Constraint::PrimaryKey {
                     name: #cname.into(),
                     columns: vec!["id".into()],
                 },
@@ -41,9 +35,9 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
         }
 
         let ty = &field.ty;
-        bounds.insert(quote!(#models_path::ToColumn<#ty>).to_string());
+        bounds.insert(quote!(mendes::models::ToColumn<#ty>).to_string());
         columns.extend(quote!(
-            <Sys as #models_path::ToColumn<#ty>>::to_column(#name.into(), &[]),
+            <Sys as mendes::models::ToColumn<#ty>>::to_column(#name.into(), &[]),
         ));
     }
 
@@ -74,9 +68,9 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
         });
 
     let impls = quote!(
-        impl#impl_generics #models_path::Model<Sys> for #name#type_generics #where_clause #bounds {
-            fn table() -> #models_path::Table {
-                #models_path::Table {
+        impl#impl_generics mendes::models::Model<Sys> for #name#type_generics #where_clause #bounds {
+            fn table() -> mendes::models::Table {
+                mendes::models::Table {
                     name: #table_name.into(),
                     columns: vec![#columns],
                     constraints: vec![#constraints],

@@ -5,7 +5,7 @@ use http::StatusCode;
 pub use http;
 pub use mendes_macros::{dispatch, handler};
 #[cfg(feature = "models")]
-pub use mendes_models::*;
+pub mod models;
 
 #[cfg(feature = "cookies")]
 pub mod cookies;
