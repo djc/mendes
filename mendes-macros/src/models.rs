@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use proc_macro2::Span;
 use quote::quote;
+use syn::Token;
 
 pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
     let fields = match &mut ast.fields {
@@ -19,7 +20,7 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
     }
 
     let mut bounds = HashSet::new();
-    bounds.insert(quote!(mendes::models::System).to_string());
+    bounds.insert(quote!(Sys: mendes::models::System).to_string());
     let mut columns = proc_macro2::TokenStream::new();
     let mut constraints = proc_macro2::TokenStream::new();
     for field in fields.named.iter_mut() {
@@ -34,10 +35,22 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
             ));
         }
 
-        let ty = &field.ty;
-        bounds.insert(quote!(mendes::models::ToColumn<#ty>).to_string());
+        let ty = match &field.ty {
+            syn::Type::Path(ty) => ty,
+            _ => panic!("unsupported type"),
+        };
+
+        let mut expr_ty = ty.path.clone();
+        for i in 0..expr_ty.segments.len() {
+            let segment = &mut expr_ty.segments[i];
+            if let syn::PathArguments::AngleBracketed(args) = &mut segment.arguments {
+                args.colon2_token = Some(Token![::](Span::call_site()));
+            };
+        }
+
+        bounds.insert(quote!(#ty: mendes::models::ToColumn<Sys>).to_string());
         columns.extend(quote!(
-            <Sys as mendes::models::ToColumn<#ty>>::to_column(#name.into(), &[]),
+            <#expr_ty as mendes::models::ToColumn<Sys>>::to_column(#name.into(), &[]),
         ));
     }
 
@@ -59,9 +72,9 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
     let bounds = bounds
         .iter()
         .enumerate()
-        .fold(quote!(where Sys:), |mut tokens, (i, bound)| {
+        .fold(quote!(where), |mut tokens, (i, bound)| {
             if i > 0 {
-                tokens.extend(quote!(+));
+                tokens.extend(quote!(,));
             }
             tokens.extend(proc_macro2::TokenStream::from_str(bound).unwrap());
             tokens

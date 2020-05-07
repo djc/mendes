@@ -84,10 +84,7 @@ pub trait EnumType {
     const VARIANTS: &'static [&'static str];
 }
 
-impl<T> ToColumn<T> for PostgreSQL
-where
-    T: EnumType,
-{
+impl<T: EnumType> ToColumn<PostgreSQL> for T {
     fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
         let ty_name = T::NAME;
 
@@ -116,11 +113,11 @@ pub trait Model<S: System> {
     fn table() -> Table;
 }
 
-pub trait ToColumn<T>: System {
+pub trait ToColumn<Sys: System> {
     fn to_column(name: Cow<'static, str>, params: &[(&str, &str)]) -> Column;
 }
 
-impl ToColumn<bool> for PostgreSQL {
+impl ToColumn<PostgreSQL> for bool {
     fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
         Column {
             name,
@@ -132,7 +129,7 @@ impl ToColumn<bool> for PostgreSQL {
     }
 }
 
-impl ToColumn<Serial<i32>> for PostgreSQL {
+impl ToColumn<PostgreSQL> for Serial<i32> {
     fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
         Column {
             name,
@@ -144,7 +141,7 @@ impl ToColumn<Serial<i32>> for PostgreSQL {
     }
 }
 
-impl ToColumn<i32> for PostgreSQL {
+impl ToColumn<PostgreSQL> for i32 {
     fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
         Column {
             name,
@@ -156,7 +153,7 @@ impl ToColumn<i32> for PostgreSQL {
     }
 }
 
-impl ToColumn<i64> for PostgreSQL {
+impl ToColumn<PostgreSQL> for i64 {
     fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
         Column {
             name,
@@ -168,7 +165,7 @@ impl ToColumn<i64> for PostgreSQL {
     }
 }
 
-impl ToColumn<Cow<'_, str>> for PostgreSQL {
+impl ToColumn<PostgreSQL> for Cow<'_, str> {
     fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
         Column {
             name,
@@ -180,7 +177,7 @@ impl ToColumn<Cow<'_, str>> for PostgreSQL {
     }
 }
 
-impl ToColumn<String> for PostgreSQL {
+impl ToColumn<PostgreSQL> for String {
     fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
         Column {
             name,
@@ -193,7 +190,7 @@ impl ToColumn<String> for PostgreSQL {
 }
 
 #[cfg(feature = "chrono")]
-impl ToColumn<chrono::NaiveDate> for PostgreSQL {
+impl ToColumn<PostgreSQL> for chrono::NaiveDate {
     fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
         Column {
             name,
