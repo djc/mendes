@@ -168,6 +168,18 @@ impl ToColumn<i64> for PostgreSQL {
     }
 }
 
+impl ToColumn<Cow<'_, str>> for PostgreSQL {
+    fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
+        Column {
+            name,
+            ty: "text".into(),
+            null: false,
+            default: None,
+            type_def: None,
+        }
+    }
+}
+
 impl ToColumn<String> for PostgreSQL {
     fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
         Column {
