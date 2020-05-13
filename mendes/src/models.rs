@@ -201,6 +201,18 @@ impl ToColumn<PostgreSQL> for i64 {
     }
 }
 
+impl ToColumn<PostgreSQL> for Vec<u8> {
+    fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
+        Column {
+            name,
+            ty: "bytea".into(),
+            null: false,
+            default: None,
+            type_def: None,
+        }
+    }
+}
+
 impl ToColumn<PostgreSQL> for Cow<'_, str> {
     fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
         Column {
