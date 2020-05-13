@@ -250,6 +250,19 @@ impl ToColumn<PostgreSQL> for chrono::NaiveDate {
     }
 }
 
+#[cfg(feature = "chrono")]
+impl ToColumn<PostgreSQL> for chrono::DateTime<chrono::FixedOffset> {
+    fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
+        Column {
+            name,
+            ty: "timestamp with time zone".into(),
+            null: false,
+            default: None,
+            type_def: None,
+        }
+    }
+}
+
 pub struct PostgreSQL {}
 
 impl System for PostgreSQL {}
