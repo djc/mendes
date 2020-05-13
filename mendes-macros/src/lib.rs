@@ -7,6 +7,7 @@ mod cookies;
 mod forms;
 mod models;
 mod route;
+mod util;
 
 #[proc_macro_attribute]
 pub fn cookie(_: TokenStream, item: TokenStream) -> TokenStream {
