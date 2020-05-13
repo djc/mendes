@@ -56,6 +56,12 @@ impl fmt::Display for Column {
 }
 
 pub enum Constraint {
+    ForeignKey {
+        name: Cow<'static, str>,
+        columns: Vec<Cow<'static, str>>,
+        ref_table: Cow<'static, str>,
+        ref_columns: Vec<Cow<'static, str>>,
+    },
     PrimaryKey {
         name: Cow<'static, str>,
         columns: Vec<Cow<'static, str>>,
@@ -65,6 +71,28 @@ pub enum Constraint {
 impl fmt::Display for Constraint {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Constraint::ForeignKey {
+                name,
+                columns,
+                ref_table,
+                ref_columns,
+            } => {
+                write!(fmt, "CONSTRAINT {} FOREIGN KEY (", name)?;
+                for (i, col) in columns.iter().enumerate() {
+                    if i > 0 {
+                        write!(fmt, ", ")?;
+                    }
+                    write!(fmt, "{}", col)?;
+                }
+                write!(fmt, ") REFERENCES {} (", ref_table)?;
+                for (i, col) in ref_columns.iter().enumerate() {
+                    if i > 0 {
+                        write!(fmt, ", ")?;
+                    }
+                    write!(fmt, "{}", col)?;
+                }
+                write!(fmt, ")")
+            }
             Constraint::PrimaryKey { name, columns } => {
                 write!(fmt, "CONSTRAINT {} PRIMARY KEY (", name)?;
                 for (i, col) in columns.iter().enumerate() {
@@ -112,8 +140,13 @@ impl<T: EnumType> ToColumn<PostgreSQL> for T {
     }
 }
 
-pub trait Model<S: System> {
+pub trait Model<Sys: System>: ModelMeta {
     fn table() -> Table;
+}
+
+pub trait ModelMeta {
+    type PrimaryKey;
+    const TABLE_NAME: &'static str;
 }
 
 pub trait ToColumn<Sys: System> {

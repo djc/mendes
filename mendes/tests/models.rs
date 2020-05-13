@@ -1,5 +1,5 @@
 #![cfg(feature = "models")]
-use mendes::models::{model, model_type, PostgreSQL, Serial, System};
+use mendes::models::{model, model_type, ModelMeta, PostgreSQL, Serial, System};
 
 #[test]
 fn test_model() {
@@ -17,6 +17,16 @@ fn test_model() {
              CONSTRAINT nameds_pkey PRIMARY KEY (id)\
          )"
     );
+
+    assert_eq!(
+        PostgreSQL::table::<Dependent>().to_string(),
+        "CREATE TABLE dependents (\
+             id serial NOT NULL, \
+             named integer NOT NULL, \
+             CONSTRAINT dependents_pkey PRIMARY KEY (id), \
+             CONSTRAINT named FOREIGN KEY (named) REFERENCES nameds (id)\
+         )"
+    )
 }
 
 #[allow(dead_code)]
@@ -38,3 +48,10 @@ enum Foo {
 
 #[model_type]
 struct Wrap(i32);
+
+#[allow(dead_code)]
+#[model]
+struct Dependent {
+    id: Serial<i32>,
+    named: <Named as ModelMeta>::PrimaryKey,
+}

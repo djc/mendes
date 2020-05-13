@@ -1,9 +1,9 @@
 use std::collections::HashSet;
+use std::mem;
 use std::str::FromStr;
 
 use proc_macro2::Span;
 use quote::quote;
-use syn::Token;
 
 pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
     let fields = match &mut ast.fields {
@@ -19,8 +19,8 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
         table_name.push('s');
     }
 
+    let mut pkey_ty = None;
     let mut bounds = HashSet::new();
-    bounds.insert(quote!(Sys: mendes::models::System).to_string());
     let mut columns = proc_macro2::TokenStream::new();
     let mut constraints = proc_macro2::TokenStream::new();
     for field in fields.named.iter_mut() {
@@ -40,47 +40,97 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
             _ => panic!("unsupported type"),
         };
 
-        let mut expr_ty = ty.path.clone();
-        for i in 0..expr_ty.segments.len() {
-            let segment = &mut expr_ty.segments[i];
-            if let syn::PathArguments::AngleBracketed(args) = &mut segment.arguments {
-                args.colon2_token = Some(Token![::](Span::call_site()));
+        if name == "id" {
+            let segment = ty.path.segments.last().unwrap();
+            pkey_ty = if segment.ident == "Serial" {
+                match &segment.arguments {
+                    syn::PathArguments::AngleBracketed(args) => match args.args.first() {
+                        Some(syn::GenericArgument::Type(syn::Type::Path(ty))) => Some(ty),
+                        _ => panic!("unsupported Serial argument type"),
+                    },
+                    _ => panic!("unsupported Serial argument type"),
+                }
+            } else {
+                Some(ty)
             };
+            bounds.insert(quote!(#pkey_ty: mendes::models::ToColumn<Sys>).to_string());
+        }
+
+        if ty.path.segments.last().unwrap().ident == "PrimaryKey" {
+            let mut ref_table = ty.clone();
+            let last = ref_table.path.segments.last_mut().unwrap();
+            mem::replace(
+                &mut last.ident,
+                syn::Ident::new("TABLE_NAME", Span::call_site()),
+            );
+            constraints.extend(quote!(
+                mendes::models::Constraint::ForeignKey {
+                    name: #name.into(),
+                    columns: vec![#name.into()],
+                    ref_table: #ref_table.into(),
+                    ref_columns: vec!["id".into()],
+                },
+            ));
         }
 
         bounds.insert(quote!(#ty: mendes::models::ToColumn<Sys>).to_string());
         columns.extend(quote!(
-            <#expr_ty as mendes::models::ToColumn<Sys>>::to_column(#name.into(), &[]),
+            <#ty as mendes::models::ToColumn<Sys>>::to_column(#name.into(), &[]),
         ));
     }
 
-    let mut generics = ast.generics.clone();
-    generics.params.push(
-        syn::TypeParam {
-            attrs: vec![],
-            ident: syn::Ident::new("Sys", Span::call_site()),
-            colon_token: None,
-            bounds: syn::punctuated::Punctuated::new(),
-            eq_token: None,
-            default: None,
+    let system = ast.generics.params.iter().any(|param| {
+        // TODO: make this more robust
+        match param {
+            syn::GenericParam::Type(ty_param) => ty_param.ident == "Sys",
+            _ => false,
         }
-        .into(),
-    );
+    });
 
-    let (_, type_generics, where_clause) = &ast.generics.split_for_impl();
-    let (impl_generics, _, _) = generics.split_for_impl();
-    let bounds = bounds
-        .iter()
-        .enumerate()
-        .fold(quote!(where), |mut tokens, (i, bound)| {
+    let mut generics = ast.generics.clone();
+    let (impl_generics, type_generics, where_clause) = if !system {
+        bounds.insert(quote!(Sys: mendes::models::System).to_string());
+        generics.params.push(
+            syn::TypeParam {
+                attrs: vec![],
+                ident: syn::Ident::new("Sys", Span::call_site()),
+                colon_token: None,
+                bounds: syn::punctuated::Punctuated::new(),
+                eq_token: None,
+                default: None,
+            }
+            .into(),
+        );
+
+        let (_, type_generics, where_clause) = ast.generics.split_for_impl();
+        let (impl_generics, _, _) = generics.split_for_impl();
+        (impl_generics, type_generics, where_clause)
+    } else {
+        ast.generics.split_for_impl()
+    };
+
+    let bounds = bounds.iter().enumerate().fold(
+        if where_clause.is_none() {
+            quote!(where)
+        } else {
+            quote!(,)
+        },
+        |mut tokens, (i, bound)| {
             if i > 0 {
                 tokens.extend(quote!(,));
             }
             tokens.extend(proc_macro2::TokenStream::from_str(bound).unwrap());
             tokens
-        });
+        },
+    );
 
+    let orig_impl_generics = ast.generics.split_for_impl().0;
     let impls = quote!(
+        impl#orig_impl_generics mendes::models::ModelMeta for #name#type_generics #where_clause {
+            type PrimaryKey = #pkey_ty;
+            const TABLE_NAME: &'static str = #table_name;
+        }
+
         impl#impl_generics mendes::models::Model<Sys> for #name#type_generics #where_clause #bounds {
             fn table() -> mendes::models::Table {
                 mendes::models::Table {
