@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use proc_macro2::Span;
 use quote::quote;
+use syn::ext::IdentExt;
 
 pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
     let fields = match &mut ast.fields {
@@ -24,7 +25,7 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
     let mut columns = proc_macro2::TokenStream::new();
     let mut constraints = proc_macro2::TokenStream::new();
     for field in fields.named.iter_mut() {
-        let name = field.ident.as_ref().unwrap().to_string();
+        let name = field.ident.as_ref().unwrap().unraw().to_string();
         if name == "id" {
             let cname = format!("{}_pkey", table_name);
             constraints.extend(quote!(
