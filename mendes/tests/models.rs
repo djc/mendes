@@ -1,5 +1,6 @@
-#![cfg(feature = "models")]
-use mendes::models::{model, model_type, ModelMeta, PostgreSQL, Serial, System};
+#![cfg(all(feature = "models", feature = "tokio-postgres"))]
+use mendes::models::postgres::PostgreSQL;
+use mendes::models::{model, model_type, ModelMeta, Serial, System};
 
 #[test]
 fn test_model() {
