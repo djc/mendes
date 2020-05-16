@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::fmt::Write;
 use std::mem;
 use std::str::FromStr;
 
@@ -24,8 +25,11 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
     let mut bounds = HashSet::new();
     let mut columns = proc_macro2::TokenStream::new();
     let mut constraints = proc_macro2::TokenStream::new();
+    let mut column_names = Vec::with_capacity(fields.named.len());
+    let mut params = proc_macro2::TokenStream::new();
     for field in fields.named.iter_mut() {
         let name = field.ident.as_ref().unwrap().unraw().to_string();
+        column_names.push(name.clone());
         if name == "id" {
             let cname = format!("{}_pkey", table_name);
             constraints.extend(quote!(
@@ -78,6 +82,9 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
         columns.extend(quote!(
             <#ty as mendes::models::ToColumn<Sys>>::to_column(#name.into(), &[]),
         ));
+
+        let field_name = field.ident.as_ref().unwrap();
+        params.extend(quote!(<#ty as mendes::models::ToColumn<Sys>>::value(&self.#field_name), ));
     }
 
     let system = ast.generics.params.iter().any(|param| {
@@ -125,6 +132,22 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
         },
     );
 
+    let mut placeholders = String::with_capacity(column_names.len() * 4);
+    for i in 0..column_names.len() {
+        placeholders
+            .write_fmt(format_args!("${}, ", i + 1))
+            .unwrap();
+    }
+    placeholders.pop();
+    placeholders.pop();
+
+    let insert = format!(
+        "INSERT INTO {} ({}) VALUES ({})",
+        table_name,
+        column_names.join(", "),
+        placeholders
+    );
+
     let orig_impl_generics = ast.generics.split_for_impl().0;
     let impls = quote!(
         impl#orig_impl_generics mendes::models::ModelMeta for #name#type_generics #where_clause {
@@ -139,6 +162,10 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
                     columns: vec![#columns],
                     constraints: vec![#constraints],
                 }
+            }
+
+            fn insert(&self) -> (&str, Vec<&Sys::Parameter>) {
+                (#insert, vec![#params])
             }
         }
     );
@@ -190,6 +217,8 @@ fn newtype_type(ty: &syn::ItemStruct) -> proc_macro2::TokenStream {
             Sys: mendes::models::System,
             #wrapped: mendes::models::ToColumn<Sys>,
         {
+            fn value(&self) -> &Sys::Parameter { self.0.value() }
+
             fn to_column(name: std::borrow::Cow<'static, str>, data: &[(&str, &str)]) -> mendes::models::Column {
                 #wrapped::to_column(name, data)
             }

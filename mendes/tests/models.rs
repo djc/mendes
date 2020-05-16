@@ -1,5 +1,5 @@
-#![cfg(all(feature = "models", feature = "tokio-postgres"))]
-use mendes::models::postgres::PostgreSQL;
+#![cfg(all(feature = "models", feature = "postgres"))]
+use mendes::models::postgres::{types, PostgreSQL};
 use mendes::models::{model, model_type, ModelMeta, Serial, System};
 
 #[test]
@@ -42,12 +42,14 @@ struct Named {
 
 #[allow(dead_code)]
 #[model_type]
+#[derive(Debug, types::ToSql)]
 enum Foo {
     Bar,
     Baz,
 }
 
 #[model_type]
+#[derive(Debug, types::ToSql)]
 struct Wrap(i32);
 
 #[allow(dead_code)]

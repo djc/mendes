@@ -1,12 +1,44 @@
 use std::borrow::Cow;
+use std::error::Error as StdError;
 
-use super::{Column, EnumType, Serial, System, ToColumn};
+use bytes::BytesMut;
+
+use super::{Column, EnumType, Model, Serial, System, ToColumn};
+
+pub use postgres_types as types;
 
 pub struct PostgreSQL {}
 
-impl System for PostgreSQL {}
+impl System for PostgreSQL {
+    type Parameter = Parameter;
+    type StatementReturn = Result<u64, tokio_postgres::Error>;
+}
 
-impl<T: EnumType> ToColumn<PostgreSQL> for T {
+impl<T> types::ToSql for Serial<T>
+where
+    T: types::ToSql,
+{
+    fn to_sql(
+        &self,
+        ty: &types::Type,
+        out: &mut BytesMut,
+    ) -> Result<types::IsNull, Box<dyn StdError + Sync + Send>> {
+        T::to_sql(&self.0, ty, out)
+    }
+    fn accepts(ty: &types::Type) -> bool {
+        T::accepts(ty)
+    }
+    types::to_sql_checked!();
+}
+
+impl<T: EnumType> ToColumn<PostgreSQL> for T
+where
+    Self: types::ToSql + Sync + 'static,
+{
+    fn value(&self) -> &Parameter {
+        self
+    }
+
     fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
         let ty_name = T::NAME;
 
@@ -31,7 +63,14 @@ impl<T: EnumType> ToColumn<PostgreSQL> for T {
     }
 }
 
-impl ToColumn<PostgreSQL> for bool {
+impl ToColumn<PostgreSQL> for bool
+where
+    Self: types::ToSql,
+{
+    fn value(&self) -> &Parameter {
+        self
+    }
+
     fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
         Column {
             name,
@@ -43,7 +82,14 @@ impl ToColumn<PostgreSQL> for bool {
     }
 }
 
-impl ToColumn<PostgreSQL> for Serial<i32> {
+impl ToColumn<PostgreSQL> for Serial<i32>
+where
+    Self: types::ToSql,
+{
+    fn value(&self) -> &Parameter {
+        self
+    }
+
     fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
         Column {
             name,
@@ -55,7 +101,14 @@ impl ToColumn<PostgreSQL> for Serial<i32> {
     }
 }
 
-impl ToColumn<PostgreSQL> for i32 {
+impl ToColumn<PostgreSQL> for i32
+where
+    Self: types::ToSql,
+{
+    fn value(&self) -> &Parameter {
+        self
+    }
+
     fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
         Column {
             name,
@@ -67,7 +120,14 @@ impl ToColumn<PostgreSQL> for i32 {
     }
 }
 
-impl ToColumn<PostgreSQL> for i64 {
+impl ToColumn<PostgreSQL> for i64
+where
+    Self: types::ToSql,
+{
+    fn value(&self) -> &Parameter {
+        self
+    }
+
     fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
         Column {
             name,
@@ -79,7 +139,14 @@ impl ToColumn<PostgreSQL> for i64 {
     }
 }
 
-impl ToColumn<PostgreSQL> for Vec<u8> {
+impl ToColumn<PostgreSQL> for Vec<u8>
+where
+    Self: types::ToSql,
+{
+    fn value(&self) -> &Parameter {
+        self
+    }
+
     fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
         Column {
             name,
@@ -91,19 +158,14 @@ impl ToColumn<PostgreSQL> for Vec<u8> {
     }
 }
 
-impl ToColumn<PostgreSQL> for Cow<'_, str> {
-    fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
-        Column {
-            name,
-            ty: "text".into(),
-            null: false,
-            default: None,
-            type_def: None,
-        }
+impl ToColumn<PostgreSQL> for String
+where
+    Self: types::ToSql,
+{
+    fn value(&self) -> &Parameter {
+        self
     }
-}
 
-impl ToColumn<PostgreSQL> for String {
     fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
         Column {
             name,
@@ -116,7 +178,14 @@ impl ToColumn<PostgreSQL> for String {
 }
 
 #[cfg(feature = "chrono")]
-impl ToColumn<PostgreSQL> for chrono::NaiveDate {
+impl ToColumn<PostgreSQL> for chrono::NaiveDate
+where
+    Self: types::ToSql,
+{
+    fn value(&self) -> &Parameter {
+        self
+    }
+
     fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
         Column {
             name,
@@ -129,7 +198,14 @@ impl ToColumn<PostgreSQL> for chrono::NaiveDate {
 }
 
 #[cfg(feature = "chrono")]
-impl ToColumn<PostgreSQL> for chrono::DateTime<chrono::FixedOffset> {
+impl ToColumn<PostgreSQL> for chrono::DateTime<chrono::FixedOffset>
+where
+    Self: types::ToSql,
+{
+    fn value(&self) -> &Parameter {
+        self
+    }
+
     fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
         Column {
             name,
@@ -140,3 +216,17 @@ impl ToColumn<PostgreSQL> for chrono::DateTime<chrono::FixedOffset> {
         }
     }
 }
+
+pub struct Client(pub tokio_postgres::Client);
+
+impl Client {
+    pub async fn insert<M: Model<PostgreSQL>>(
+        &self,
+        data: &M,
+    ) -> Result<u64, tokio_postgres::Error> {
+        let (statement, params) = data.insert();
+        self.0.execute(statement, &params).await
+    }
+}
+
+type Parameter = dyn tokio_postgres::types::ToSql + Sync;

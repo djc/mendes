@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 pub use mendes_macros::{model, model_type};
 
-#[cfg(feature = "tokio-postgres")]
+#[cfg(feature = "postgres")]
 pub mod postgres;
 
 pub struct Table {
@@ -110,8 +110,14 @@ impl fmt::Display for Constraint {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Serial<T>(T);
+
+impl<T> From<T> for Serial<T> {
+    fn from(t: T) -> Self {
+        Serial(t)
+    }
+}
 
 pub trait EnumType {
     const NAME: &'static str;
@@ -120,6 +126,8 @@ pub trait EnumType {
 
 pub trait Model<Sys: System>: ModelMeta {
     fn table() -> Table;
+    // TODO: don't use a Vec for this (needs const generics?)
+    fn insert(&self) -> (&str, Vec<&Sys::Parameter>);
 }
 
 pub trait ModelMeta {
@@ -128,10 +136,14 @@ pub trait ModelMeta {
 }
 
 pub trait ToColumn<Sys: System> {
+    fn value(&self) -> &Sys::Parameter;
     fn to_column(name: Cow<'static, str>, params: &[(&str, &str)]) -> Column;
 }
 
 pub trait System: Sized {
+    type Parameter: ?Sized;
+    type StatementReturn;
+
     fn table<M: Model<Self>>() -> Table {
         M::table()
     }
