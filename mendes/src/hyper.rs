@@ -5,10 +5,11 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use futures_util::future::FutureExt;
 use hyper::service::{make_service_fn, service_fn};
-use hyper::Body;
 
 use super::{Application, Context};
 use crate::application::Server;
+
+pub use hyper::Body;
 
 #[async_trait]
 impl<A> Server for A

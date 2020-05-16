@@ -15,7 +15,7 @@ pub mod cookies;
 pub mod forms;
 
 #[cfg(feature = "hyper")]
-mod hyper;
+pub mod hyper;
 
 #[cfg(feature = "models")]
 pub mod models;
