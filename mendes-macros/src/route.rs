@@ -60,7 +60,7 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
     for (pat, ty) in args {
         block.push(Statement::get(
             quote!(
-                let #pat = <#ty as mendes::FromContext>::from_context::<#app_type>(&cx.req, &mut cx.path)?;
+                let #pat = <#ty as mendes::FromContext<#app_type>>::from_context(&cx.req, &mut cx.path, &mut cx.body)?;
             )
             .into(),
         ));

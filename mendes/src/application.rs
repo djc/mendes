@@ -116,32 +116,42 @@ where
     }
 }
 
-pub trait FromContext<'a>: Sized {
-    fn from_context<A: Application>(
+pub trait FromContext<'a, A>: Sized
+where
+    A: Application,
+{
+    fn from_context(
         req: &'a Parts,
         state: &mut PathState,
+        body: &mut Option<A::RequestBody>,
     ) -> Result<Self, A::Error>;
 }
 
-impl<'a> FromContext<'a> for &'a http::request::Parts {
-    fn from_context<A: Application>(req: &'a Parts, _: &mut PathState) -> Result<Self, A::Error> {
+impl<'a, A: Application> FromContext<'a, A> for &'a http::request::Parts {
+    fn from_context(
+        req: &'a Parts,
+        _: &mut PathState,
+        _: &mut Option<A::RequestBody>,
+    ) -> Result<Self, A::Error> {
         Ok(req)
     }
 }
 
-impl<'a> FromContext<'a> for Option<&'a str> {
-    fn from_context<A: Application>(
+impl<'a, A: Application> FromContext<'a, A> for Option<&'a str> {
+    fn from_context(
         req: &'a Parts,
         state: &mut PathState,
+        _: &mut Option<A::RequestBody>,
     ) -> Result<Self, A::Error> {
         Ok(state.next(&req.uri.path()))
     }
 }
 
-impl<'a> FromContext<'a> for &'a str {
-    fn from_context<A: Application>(
+impl<'a, A: Application> FromContext<'a, A> for &'a str {
+    fn from_context(
         req: &'a Parts,
         state: &mut PathState,
+        _: &mut Option<A::RequestBody>,
     ) -> Result<Self, A::Error> {
         state
             .next(&req.uri.path())
@@ -149,20 +159,22 @@ impl<'a> FromContext<'a> for &'a str {
     }
 }
 
-impl<'a> FromContext<'a> for usize {
-    fn from_context<A: Application>(
+impl<'a, A: Application> FromContext<'a, A> for usize {
+    fn from_context(
         req: &'a Parts,
         state: &mut PathState,
+        _: &mut Option<A::RequestBody>,
     ) -> Result<Self, A::Error> {
         let s = state.next(&req.uri.path()).ok_or(ClientError::NotFound)?;
         usize::from_str(s).map_err(|_| ClientError::NotFound.into())
     }
 }
 
-impl<'a> FromContext<'a> for i32 {
-    fn from_context<A: Application>(
+impl<'a, A: Application> FromContext<'a, A> for i32 {
+    fn from_context(
         req: &'a Parts,
         state: &mut PathState,
+        _: &mut Option<A::RequestBody>,
     ) -> Result<Self, A::Error> {
         let s = state.next(&req.uri.path()).ok_or(ClientError::NotFound)?;
         i32::from_str(s).map_err(|_| ClientError::NotFound.into())
