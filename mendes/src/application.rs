@@ -5,11 +5,16 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+#[cfg(feature = "with-http-body")]
+use bytes::{Buf, BufMut, Bytes};
+#[cfg(feature = "with-http-body")]
+use futures_util;
 use http::header::LOCATION;
 use http::request::Parts;
 use http::Request;
 use http::{Response, StatusCode};
-use serde::Deserialize;
+#[cfg(feature = "with-http-body")]
+use http_body::Body as HttpBody;
 
 pub use mendes_macros::{dispatch, handler};
 
@@ -22,6 +27,36 @@ pub trait Application: Sized {
     async fn handle(cx: Context<Self>) -> Response<Self::ResponseBody>;
 
     fn error(&self, error: Self::Error) -> Response<Self::ResponseBody>;
+
+    fn from_body_bytes<'de, T: serde::de::Deserialize<'de>>(
+        req: &Parts,
+        bytes: &'de [u8],
+    ) -> Result<T, Self::Error> {
+        from_bytes::<T>(req, bytes).map_err(|e| e.into())
+    }
+
+    #[cfg(feature = "with-http-body")]
+    async fn from_body<T: serde::de::DeserializeOwned>(
+        req: &Parts,
+        body: Self::RequestBody,
+    ) -> Result<T, Self::Error>
+    where
+        Self::RequestBody: HttpBody + Send,
+        <Self::RequestBody as HttpBody>::Data: Send,
+        Self::Error: From<<Self::RequestBody as HttpBody>::Error>,
+    {
+        from_body::<Self::RequestBody, Self::Error, T>(req, body).await
+    }
+
+    #[cfg(feature = "with-http-body")]
+    async fn body_bytes(body: Self::RequestBody) -> Result<Bytes, Self::Error>
+    where
+        Self::RequestBody: HttpBody + Send,
+        <Self::RequestBody as HttpBody>::Data: Send,
+        Self::Error: From<<Self::RequestBody as HttpBody>::Error>,
+    {
+        Ok(to_bytes(body).await?)
+    }
 
     fn redirect(status: StatusCode, path: &str) -> Response<Self::ResponseBody>
     where
@@ -181,33 +216,96 @@ impl<'a, A: Application> FromContext<'a, A> for i32 {
     }
 }
 
-#[doc(hidden)]
-#[cfg(feature = "hyper")]
-impl<A> Context<A>
+#[cfg(feature = "with-http-body")]
+// TODO: the duplication between from_bytes() and from_body() is ugly, but I'm not sure how
+// to abstract over the difference in serde bounds.
+async fn from_body<B, E, T: serde::de::DeserializeOwned>(req: &Parts, body: B) -> Result<T, E>
 where
-    A: Application,
-    A::RequestBody: hyper::body::HttpBody,
+    B: HttpBody,
+    E: From<B::Error> + From<ClientError>,
 {
-    pub async fn retrieve_body(&mut self) -> Result<(), ClientError> {
-        let future = self.take_body().ok_or(ClientError::BadRequest)?;
-        let bytes = hyper::body::to_bytes(future)
-            .await
-            .map_err(|_| ClientError::BadRequest)?;
-        self.req.extensions.insert(BodyBytes(bytes));
-        Ok(())
-    }
+    let bytes = to_bytes(body).await.map_err(|_| ClientError::BadRequest)?;
 
-    pub fn from_body<'a, T>(&'a self) -> Result<T, ClientError>
-    where
-        T: 'a + Deserialize<'a>,
-    {
-        let bytes = self.req.extensions.get::<BodyBytes>().unwrap();
-        Ok(from_body_bytes(&self.req.headers, &bytes.0)?)
-    }
+    let inner = match req.headers.get("content-type") {
+        #[cfg(feature = "serde_urlencoded")]
+        Some(t) if t == "application/x-www-form-urlencoded" => {
+            serde_urlencoded::from_bytes::<T>(&bytes)
+                .map_err(|_| ClientError::UnprocessableEntity)?
+        }
+        #[cfg(feature = "serde_json")]
+        Some(t) if t == "application/json" => {
+            serde_json::from_slice::<T>(&bytes).map_err(|_| ClientError::UnprocessableEntity)?
+        }
+        #[cfg(feature = "uploads")]
+        Some(t) if t.as_bytes().starts_with(b"multipart/form-data") => {
+            crate::forms::from_form_data::<T>(&req.headers, &bytes)
+                .map_err(|_| ClientError::UnprocessableEntity)?
+        }
+        None => return Err(ClientError::BadRequest.into()),
+        _ => return Err(ClientError::UnsupportedMediaType.into()),
+    };
+
+    Ok(inner)
 }
 
-#[cfg(feature = "hyper")]
-struct BodyBytes(bytes::Bytes);
+fn from_bytes<'de, T: serde::de::Deserialize<'de>>(
+    req: &Parts,
+    bytes: &'de [u8],
+) -> Result<T, ClientError> {
+    let inner = match req.headers.get("content-type") {
+        #[cfg(feature = "serde_urlencoded")]
+        Some(t) if t == "application/x-www-form-urlencoded" => {
+            serde_urlencoded::from_bytes::<T>(&bytes)
+                .map_err(|_| ClientError::UnprocessableEntity)?
+        }
+        #[cfg(feature = "serde_json")]
+        Some(t) if t == "application/json" => {
+            serde_json::from_slice::<T>(&bytes).map_err(|_| ClientError::UnprocessableEntity)?
+        }
+        #[cfg(feature = "uploads")]
+        Some(t) if t.as_bytes().starts_with(b"multipart/form-data") => {
+            crate::forms::from_form_data::<T>(&req.headers, &bytes)
+                .map_err(|_| ClientError::UnprocessableEntity)?
+        }
+        None => return Err(ClientError::BadRequest.into()),
+        _ => return Err(ClientError::UnsupportedMediaType.into()),
+    };
+
+    Ok(inner)
+}
+
+#[cfg(feature = "with-http-body")]
+async fn to_bytes<T>(body: T) -> Result<Bytes, T::Error>
+where
+    T: HttpBody,
+{
+    futures_util::pin_mut!(body);
+
+    // If there's only 1 chunk, we can just return Buf::to_bytes()
+    let mut first = if let Some(buf) = body.data().await {
+        buf?
+    } else {
+        return Ok(Bytes::new());
+    };
+
+    let second = if let Some(buf) = body.data().await {
+        buf?
+    } else {
+        return Ok(first.to_bytes());
+    };
+
+    // With more than 1 buf, we gotta flatten into a Vec first.
+    let cap = first.remaining() + second.remaining() + body.size_hint().lower() as usize;
+    let mut vec = Vec::with_capacity(cap);
+    vec.put(first);
+    vec.put(second);
+
+    while let Some(buf) = body.data().await {
+        vec.put(buf?);
+    }
+
+    Ok(vec.into())
+}
 
 #[doc(hidden)]
 pub struct PathState {
@@ -264,33 +362,6 @@ impl PathState {
     pub fn rewind(&mut self) {
         self.next = self.prev.take();
     }
-}
-
-#[allow(unused_variables, unreachable_code, dead_code)]
-pub fn from_body_bytes<'de, T: 'de + Deserialize<'de>>(
-    headers: &http::HeaderMap,
-    bytes: &'de [u8],
-) -> Result<T, ClientError> {
-    let inner = match headers.get("content-type") {
-        #[cfg(feature = "serde_urlencoded")]
-        Some(t) if t == "application/x-www-form-urlencoded" => {
-            serde_urlencoded::from_bytes::<T>(bytes)
-                .map_err(|_| ClientError::UnprocessableEntity)?
-        }
-        #[cfg(feature = "serde_json")]
-        Some(t) if t == "application/json" => {
-            serde_json::from_slice::<T>(bytes).map_err(|_| ClientError::UnprocessableEntity)?
-        }
-        #[cfg(feature = "uploads")]
-        Some(t) if t.as_bytes().starts_with(b"multipart/form-data") => {
-            crate::forms::from_form_data::<T>(headers, bytes)
-                .map_err(|_| ClientError::UnprocessableEntity)?
-        }
-        None => return Err(ClientError::BadRequest),
-        _ => return Err(ClientError::UnsupportedMediaType),
-    };
-
-    Ok(inner)
 }
 
 #[derive(Clone, Copy, Debug)]

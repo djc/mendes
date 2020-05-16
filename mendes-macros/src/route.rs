@@ -11,7 +11,7 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
     let new = syn::parse::<MethodArgs>(quote!(mut cx: Context<#app_type>).into()).unwrap();
     let old = mem::replace(&mut ast.sig.inputs, new.args);
 
-    let (mut app, mut body, mut args, mut rest) = ("__app", None, vec![], None);
+    let (mut app, mut args, mut rest) = ("__app", vec![], None);
     for arg in old.iter() {
         let typed = match arg {
             syn::FnArg::Typed(typed) => typed,
@@ -34,9 +34,6 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
             if attr.path.is_ident("rest") {
                 rest = Some(pat);
                 continue;
-            } else if attr.path.is_ident("body") {
-                body = Some((pat, ty));
-                continue;
             }
         }
 
@@ -48,15 +45,6 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
     }
 
     let mut block = Vec::with_capacity(ast.block.stmts.len());
-    if body.is_some() {
-        block.push(Statement::get(
-            quote!(
-                cx.retrieve_body().await?;
-            )
-            .into(),
-        ));
-    }
-
     for (pat, ty) in args {
         block.push(Statement::get(
             quote!(
@@ -70,15 +58,6 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
         block.push(Statement::get(
             quote!(
                 let #pat = cx.path.rest(&cx.req.uri.path());
-            )
-            .into(),
-        ));
-    }
-
-    if let Some((pat, ty)) = body {
-        block.push(Statement::get(
-            quote!(
-                let #pat = cx.from_body::<#ty>()?;
             )
             .into(),
         ));
