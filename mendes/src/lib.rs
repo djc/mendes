@@ -12,11 +12,13 @@ pub mod models;
 #[cfg(feature = "cookies")]
 pub mod cookies;
 
+#[cfg(feature = "forms")]
 mod form;
 
 #[cfg(feature = "uploads")]
 mod multipart;
 
+#[cfg(feature = "forms")]
 pub mod forms {
     pub use super::form::*;
     #[cfg(feature = "uploads")]
