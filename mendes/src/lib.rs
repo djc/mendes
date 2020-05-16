@@ -31,37 +31,35 @@ pub mod hyper {
     use std::net::SocketAddr;
     use std::sync::Arc;
 
+    use async_trait::async_trait;
     use futures_util::future::FutureExt;
-    use http::{header::LOCATION, Response, StatusCode};
     use hyper::service::{make_service_fn, service_fn};
-    use hyper::{Body, Server};
+    use hyper::Body;
 
     use super::{Application, Context};
+    use crate::application::Server;
 
-    pub async fn run<A>(addr: &SocketAddr, app: A) -> Result<(), hyper::Error>
+    #[async_trait]
+    impl<A> Server for A
     where
         A: Application<RequestBody = Body, ResponseBody = Body> + Send + Sync + 'static,
     {
-        let app = Arc::new(app);
-        Server::bind(addr)
-            .serve(make_service_fn(move |_| {
-                let app = app.clone();
-                async {
-                    Ok::<_, Infallible>(service_fn(move |req| {
-                        let cx = Context::new(app.clone(), req);
-                        A::handle(cx).map(Ok::<_, Infallible>)
-                    }))
-                }
-            }))
-            .await
-    }
+        type ServerError = hyper::Error;
 
-    pub fn redirect(status: StatusCode, path: &str) -> Response<Body> {
-        http::Response::builder()
-            .status(status)
-            .header(LOCATION, path)
-            .body(Body::empty())
-            .unwrap()
+        async fn serve(self: Self, addr: &SocketAddr) -> Result<(), hyper::Error> {
+            let app = Arc::new(self);
+            hyper::Server::bind(addr)
+                .serve(make_service_fn(move |_| {
+                    let app = app.clone();
+                    async {
+                        Ok::<_, Infallible>(service_fn(move |req| {
+                            let cx = Context::new(app.clone(), req);
+                            A::handle(cx).map(Ok::<_, Infallible>)
+                        }))
+                    }
+                }))
+                .await
+        }
     }
 }
 

@@ -1,9 +1,11 @@
 use std::fmt;
+use std::net::SocketAddr;
 use std::str;
 use std::str::FromStr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use http::header::LOCATION;
 use http::request::Parts;
 use http::Request;
 use http::{Response, StatusCode};
@@ -20,6 +22,17 @@ pub trait Application: Sized {
     async fn handle(cx: Context<Self>) -> Response<Self::ResponseBody>;
 
     fn error(&self, error: Self::Error) -> Response<Self::ResponseBody>;
+
+    fn redirect(status: StatusCode, path: &str) -> Response<Self::ResponseBody>
+    where
+        Self::ResponseBody: Default,
+    {
+        http::Response::builder()
+            .status(status)
+            .header(LOCATION, path)
+            .body(Self::ResponseBody::default())
+            .unwrap()
+    }
 }
 
 pub trait Responder<A: Application> {
@@ -344,4 +357,11 @@ impl fmt::Display for ClientError {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(fmt, "{}", StatusCode::from(*self))
     }
+}
+
+#[async_trait]
+pub trait Server: Application {
+    type ServerError;
+
+    async fn serve(self, addr: &SocketAddr) -> Result<(), Self::ServerError>;
 }
