@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use http::{Method, Request, Response, StatusCode};
+use mendes::http::{Method, Request, Response, StatusCode};
 use mendes::{dispatch, handler, Application, ClientError, Context};
 
 #[tokio::test]

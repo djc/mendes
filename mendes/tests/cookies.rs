@@ -4,9 +4,9 @@ use std::convert::TryInto;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use http::header::{COOKIE, SET_COOKIE};
-use http::{Request, Response, StatusCode};
 use mendes::cookies::{cookie, CookieData};
+use mendes::http::header::{COOKIE, SET_COOKIE};
+use mendes::http::{Request, Response, StatusCode};
 use mendes::{dispatch, handler, Application, ClientError, Context};
 use serde::{Deserialize, Serialize};
 
