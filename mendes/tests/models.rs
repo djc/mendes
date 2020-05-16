@@ -1,4 +1,5 @@
 #![cfg(all(feature = "models", feature = "postgres"))]
+
 use mendes::models::postgres::{types, PostgreSQL};
 use mendes::models::{model, model_type, ModelMeta, Serial, System};
 
