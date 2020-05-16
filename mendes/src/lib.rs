@@ -12,14 +12,7 @@ pub use application::{
 pub mod cookies;
 
 #[cfg(feature = "forms")]
-mod form;
-
-#[cfg(feature = "forms")]
-pub mod forms {
-    pub use super::form::*;
-    #[cfg(feature = "uploads")]
-    pub use super::multipart::{from_form_data, File};
-}
+pub mod forms;
 
 #[cfg(feature = "hyper")]
 mod hyper;

@@ -3,6 +3,9 @@ use std::{fmt, str};
 
 pub use mendes_macros::{form, ToField};
 
+#[cfg(feature = "uploads")]
+pub use crate::multipart::{from_form_data, File};
+
 pub trait ToForm {
     fn to_form() -> Form;
 }
