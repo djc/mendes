@@ -58,7 +58,7 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
             } else {
                 Some(ty)
             };
-            bounds.insert(quote!(#pkey_ty: mendes::models::ToColumn<Sys>).to_string());
+            bounds.insert(quote!(#pkey_ty: mendes::models::ModelType<Sys>).to_string());
         }
 
         if ty.path.segments.last().unwrap().ident == "PrimaryKey" {
@@ -78,13 +78,13 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
             ));
         }
 
-        bounds.insert(quote!(#ty: mendes::models::ToColumn<Sys>).to_string());
+        bounds.insert(quote!(#ty: mendes::models::ModelType<Sys>).to_string());
         columns.extend(quote!(
-            <#ty as mendes::models::ToColumn<Sys>>::to_column(#name.into(), &[]),
+            <#ty as mendes::models::ModelType<Sys>>::to_column(#name.into(), &[]),
         ));
 
         let field_name = field.ident.as_ref().unwrap();
-        params.extend(quote!(<#ty as mendes::models::ToColumn<Sys>>::value(&self.#field_name), ));
+        params.extend(quote!(<#ty as mendes::models::ModelType<Sys>>::value(&self.#field_name), ));
     }
 
     let system = ast.generics.params.iter().any(|param| {
@@ -212,10 +212,10 @@ fn newtype_type(ty: &syn::ItemStruct) -> proc_macro2::TokenStream {
     };
 
     quote!(
-        impl<Sys> mendes::models::ToColumn<Sys> for #name
+        impl<Sys> mendes::models::ModelType<Sys> for #name
         where
             Sys: mendes::models::System,
-            #wrapped: mendes::models::ToColumn<Sys>,
+            #wrapped: mendes::models::ModelType<Sys>,
         {
             fn value(&self) -> &Sys::Parameter { self.0.value() }
 

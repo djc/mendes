@@ -3,7 +3,7 @@ use std::error::Error as StdError;
 
 use bytes::BytesMut;
 
-use super::{Column, EnumType, Model, Serial, System, ToColumn};
+use super::{Column, EnumType, Model, ModelType, Serial, System};
 
 pub use postgres_types as types;
 
@@ -31,7 +31,7 @@ where
     types::to_sql_checked!();
 }
 
-impl<T: EnumType> ToColumn<PostgreSQL> for T
+impl<T: EnumType> ModelType<PostgreSQL> for T
 where
     Self: types::ToSql + Sync + 'static,
 {
@@ -63,7 +63,7 @@ where
     }
 }
 
-impl ToColumn<PostgreSQL> for bool
+impl ModelType<PostgreSQL> for bool
 where
     Self: types::ToSql,
 {
@@ -82,7 +82,7 @@ where
     }
 }
 
-impl ToColumn<PostgreSQL> for Serial<i32>
+impl ModelType<PostgreSQL> for Serial<i32>
 where
     Self: types::ToSql,
 {
@@ -101,7 +101,7 @@ where
     }
 }
 
-impl ToColumn<PostgreSQL> for i32
+impl ModelType<PostgreSQL> for i32
 where
     Self: types::ToSql,
 {
@@ -120,7 +120,7 @@ where
     }
 }
 
-impl ToColumn<PostgreSQL> for i64
+impl ModelType<PostgreSQL> for i64
 where
     Self: types::ToSql,
 {
@@ -139,7 +139,7 @@ where
     }
 }
 
-impl ToColumn<PostgreSQL> for Vec<u8>
+impl ModelType<PostgreSQL> for Vec<u8>
 where
     Self: types::ToSql,
 {
@@ -158,7 +158,7 @@ where
     }
 }
 
-impl ToColumn<PostgreSQL> for String
+impl ModelType<PostgreSQL> for String
 where
     Self: types::ToSql,
 {
@@ -178,7 +178,7 @@ where
 }
 
 #[cfg(feature = "chrono")]
-impl ToColumn<PostgreSQL> for chrono::NaiveDate
+impl ModelType<PostgreSQL> for chrono::NaiveDate
 where
     Self: types::ToSql,
 {
@@ -198,7 +198,7 @@ where
 }
 
 #[cfg(feature = "chrono")]
-impl ToColumn<PostgreSQL> for chrono::DateTime<chrono::FixedOffset>
+impl ModelType<PostgreSQL> for chrono::DateTime<chrono::FixedOffset>
 where
     Self: types::ToSql,
 {

@@ -135,7 +135,7 @@ pub trait ModelMeta {
     const TABLE_NAME: &'static str;
 }
 
-pub trait ToColumn<Sys: System> {
+pub trait ModelType<Sys: System> {
     fn value(&self) -> &Sys::Parameter;
     fn to_column(name: Cow<'static, str>, params: &[(&str, &str)]) -> Column;
 }
