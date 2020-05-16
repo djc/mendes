@@ -1,16 +1,15 @@
+use std::fmt;
 use std::str;
 use std::str::FromStr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use http::request::Parts;
-use http::{Request, Response};
+use http::Request;
+use http::{Response, StatusCode};
 use serde::Deserialize;
 
-pub use http;
 pub use mendes_macros::{dispatch, handler};
-
-use super::ClientError;
 
 #[async_trait]
 pub trait Application: Sized {
@@ -267,4 +266,82 @@ pub fn from_body_bytes<'de, T: 'de + Deserialize<'de>>(
     };
 
     Ok(inner)
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum ClientError {
+    BadRequest,
+    Unauthorized,
+    PaymentRequired,
+    Forbidden,
+    NotFound,
+    MethodNotAllowed,
+    NotAcceptable,
+    ProxyAuthenticationRequired,
+    RequestTimeout,
+    Conflict,
+    Gone,
+    LengthRequired,
+    PreconditionFailed,
+    PayloadTooLarge,
+    RequestUriTooLong,
+    UnsupportedMediaType,
+    RequestedRangeNotSatisfiable,
+    ExpectationFailed,
+    MisdirectedRequest,
+    UnprocessableEntity,
+    Locked,
+    FailedDependency,
+    UpgradeRequired,
+    PreconditionRequired,
+    TooManyRequests,
+    RequestHeaderFieldsTooLarge,
+    UnavailableForLegalReasons,
+}
+
+impl From<ClientError> for StatusCode {
+    fn from(e: ClientError) -> StatusCode {
+        use ClientError::*;
+        match e {
+            BadRequest => StatusCode::BAD_REQUEST,
+            Unauthorized => StatusCode::UNAUTHORIZED,
+            PaymentRequired => StatusCode::PAYMENT_REQUIRED,
+            Forbidden => StatusCode::FORBIDDEN,
+            NotFound => StatusCode::NOT_FOUND,
+            MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
+            NotAcceptable => StatusCode::NOT_ACCEPTABLE,
+            ProxyAuthenticationRequired => StatusCode::PROXY_AUTHENTICATION_REQUIRED,
+            RequestTimeout => StatusCode::REQUEST_TIMEOUT,
+            Conflict => StatusCode::CONFLICT,
+            Gone => StatusCode::GONE,
+            LengthRequired => StatusCode::LENGTH_REQUIRED,
+            PreconditionFailed => StatusCode::PRECONDITION_FAILED,
+            PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
+            RequestUriTooLong => StatusCode::URI_TOO_LONG,
+            UnsupportedMediaType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            RequestedRangeNotSatisfiable => StatusCode::RANGE_NOT_SATISFIABLE,
+            ExpectationFailed => StatusCode::EXPECTATION_FAILED,
+            MisdirectedRequest => StatusCode::MISDIRECTED_REQUEST,
+            UnprocessableEntity => StatusCode::UNPROCESSABLE_ENTITY,
+            Locked => StatusCode::LOCKED,
+            FailedDependency => StatusCode::FAILED_DEPENDENCY,
+            UpgradeRequired => StatusCode::UPGRADE_REQUIRED,
+            PreconditionRequired => StatusCode::PRECONDITION_REQUIRED,
+            TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
+            RequestHeaderFieldsTooLarge => StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE,
+            UnavailableForLegalReasons => StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS,
+        }
+    }
+}
+
+impl std::error::Error for ClientError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+impl fmt::Display for ClientError {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(fmt, "{}", StatusCode::from(*self))
+    }
 }

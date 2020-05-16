@@ -149,7 +149,7 @@ pub fn dispatch(ast: &mut syn::ItemFn) {
 
     let new = quote!({
         use mendes::Application;
-        use mendes::route::Responder;
+        use mendes::application::Responder;
         let app = cx.app().clone();
         #routes
     });

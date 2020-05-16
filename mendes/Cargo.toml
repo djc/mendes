@@ -13,12 +13,13 @@ workspace = ".."
 readme = "../README.md"
 
 [features]
+application = []
 cookies = ["bincode", "data-encoding", "ring", "serde/derive"]
 forms = ["serde_urlencoded", "serde/derive"]
 json = ["serde_json"]
 models = ["serde/derive"]
 uploads = ["httparse", "twoway"]
-with-hyper = ["bytes", "futures-util", "hyper"]
+with-hyper = ["application", "bytes", "futures-util", "hyper"]
 postgres = ["bytes", "tokio-postgres", "postgres-types", "postgres-types/derive", "chrono", "postgres-types/with-chrono-0_4"]
 
 [dependencies]
