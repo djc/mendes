@@ -16,7 +16,7 @@ use http::{Response, StatusCode};
 #[cfg(feature = "with-http-body")]
 use http_body::Body as HttpBody;
 
-pub use mendes_macros::{dispatch, handler};
+pub use mendes_macros::{dispatch, get, handler, post};
 
 #[async_trait]
 pub trait Application: Sized {

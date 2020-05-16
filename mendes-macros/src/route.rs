@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::mem;
 
 use proc_macro::TokenStream;
@@ -7,29 +8,33 @@ use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
 
-pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
+pub fn handler<T>(methods: &[T], ast: &mut syn::ItemFn)
+where
+    T: Display,
+{
+    let (app_name, app_type) = match ast.sig.inputs.first() {
+        Some(syn::FnArg::Typed(syn::PatType { pat, ty, .. })) => match **ty {
+            syn::Type::Reference(ref reffed) => (pat.clone(), reffed.elem.clone()),
+            _ => panic!("handler's first argument must be a reference"),
+        },
+        _ => panic!("handler argument lists must have &App as their first type"),
+    };
+
     let new = syn::parse::<MethodArgs>(quote!(mut cx: Context<#app_type>).into()).unwrap();
     let old = mem::replace(&mut ast.sig.inputs, new.args);
+    let (mut args, mut rest) = (vec![], None);
+    for (i, arg) in old.iter().enumerate() {
+        if i == 0 {
+            // this is the Application argument
+            continue;
+        }
 
-    let (mut app, mut args, mut rest) = ("__app", vec![], None);
-    for arg in old.iter() {
         let typed = match arg {
             syn::FnArg::Typed(typed) => typed,
             _ => panic!("did not expect receiver argument in handler"),
         };
 
-        use syn::Pat::*;
         let (pat, ty) = (&typed.pat, &typed.ty);
-        if let Ident(id) = pat.as_ref() {
-            if id.ident == "app" {
-                app = "app";
-                continue;
-            } else if id.ident == "application" {
-                app = "application";
-                continue;
-            }
-        }
-
         if let Some(attr) = typed.attrs.first() {
             if attr.path.is_ident("rest") {
                 rest = Some(pat);
@@ -44,7 +49,27 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
         args.push((pat, ty));
     }
 
+    let mut method_patterns = proc_macro2::TokenStream::new();
+    for (i, method) in methods.iter().enumerate() {
+        let method = Ident::new(&method.to_string().to_ascii_uppercase(), Span::call_site());
+        method_patterns.extend(if i > 0 {
+            quote!( | &mendes::http::Method::#method)
+        } else {
+            quote!(&mendes::http::Method::#method)
+        });
+    }
+
     let mut block = Vec::with_capacity(ast.block.stmts.len());
+    block.push(Statement::get(
+        quote!(
+            match &cx.req.method {
+                #method_patterns => {}
+                _ => return Err(mendes::application::ClientError::MethodNotAllowed.into()),
+            }
+        )
+        .into(),
+    ));
+
     for (pat, ty) in args {
         block.push(Statement::get(
             quote!(
@@ -63,7 +88,6 @@ pub fn handler(app_type: &syn::Type, ast: &mut syn::ItemFn) {
         ));
     }
 
-    let app_name = Ident::new(app, Span::call_site());
     block.push(Statement::get(quote!(let #app_name = &cx.app;).into()));
     let old = mem::replace(&mut ast.block.stmts, block);
     ast.block.stmts.extend(old);
@@ -88,6 +112,19 @@ pub struct AppType {
 impl Parse for AppType {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         Ok(Self { ty: input.parse()? })
+    }
+}
+
+pub struct HandlerMethods {
+    pub methods: Vec<syn::Ident>,
+}
+
+impl Parse for HandlerMethods {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let methods = Punctuated::<syn::Ident, Comma>::parse_terminated(input)?;
+        Ok(Self {
+            methods: methods.into_iter().collect(),
+        })
     }
 }
 

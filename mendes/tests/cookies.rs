@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use mendes::cookies::{cookie, CookieData};
 use mendes::http::header::{COOKIE, SET_COOKIE};
 use mendes::http::{Request, Response, StatusCode};
-use mendes::{dispatch, handler, Application, ClientError, Context};
+use mendes::{dispatch, get, Application, ClientError, Context};
 use serde::{Deserialize, Serialize};
 
 #[tokio::test]
@@ -71,7 +71,7 @@ impl Application for App {
     }
 }
 
-#[handler(App)]
+#[get]
 async fn extract(app: &App, req: &http::request::Parts) -> Result<Response<String>, Error> {
     let session = Session::from_header(&app.key, &req.headers).unwrap();
     Ok(Response::builder()
@@ -80,7 +80,7 @@ async fn extract(app: &App, req: &http::request::Parts) -> Result<Response<Strin
         .unwrap())
 }
 
-#[handler(App)]
+#[get]
 async fn store(app: &App) -> Result<Response<String>, Error> {
     let session = Session { user: 37 };
     Ok(Response::builder()
