@@ -1,3 +1,4 @@
+#[cfg(feature = "http")]
 pub use http;
 
 #[cfg(feature = "application")]
