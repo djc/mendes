@@ -20,7 +20,9 @@ where
         _ => panic!("handler argument lists must have &App as their first type"),
     };
 
-    let new = syn::parse::<MethodArgs>(quote!(mut cx: Context<#app_type>).into()).unwrap();
+    let new =
+        syn::parse::<MethodArgs>(quote!(mut cx: mendes::application::Context<#app_type>).into())
+            .unwrap();
     let old = mem::replace(&mut ast.sig.inputs, new.args);
     let (mut args, mut rest) = (vec![], None);
     for (i, arg) in old.iter().enumerate() {
