@@ -96,6 +96,7 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
                             contents: mendes::forms::ItemContents::Multi(vec![#items]),
                         },
                     ));
+                    new.extend(tokens);
                     None
                 }
             },
