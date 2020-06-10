@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::fmt::Write;
-use std::mem;
 use std::str::FromStr;
 
 use proc_macro2::Span;
@@ -64,10 +63,7 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
         if ty.path.segments.last().unwrap().ident == "PrimaryKey" {
             let mut ref_table = ty.clone();
             let last = ref_table.path.segments.last_mut().unwrap();
-            mem::replace(
-                &mut last.ident,
-                syn::Ident::new("TABLE_NAME", Span::call_site()),
-            );
+            last.ident = syn::Ident::new("TABLE_NAME", Span::call_site());
             constraints.extend(quote!(
                 mendes::models::Constraint::ForeignKey {
                     name: #name.into(),
