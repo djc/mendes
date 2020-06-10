@@ -172,10 +172,7 @@ pub fn dispatch(ast: &mut syn::ItemFn) {
         #routes
     });
 
-    mem::replace(
-        block,
-        Box::new(syn::parse::<syn::Block>(new.into()).unwrap()),
-    );
+    *block = Box::new(syn::parse::<syn::Block>(new.into()).unwrap());
 }
 
 #[allow(clippy::large_enum_variant)]
