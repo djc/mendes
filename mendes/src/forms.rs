@@ -182,14 +182,17 @@ impl Item {
 
 impl fmt::Display for Item {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(fmt, "<label")?;
-        if let ItemContents::Single(f) = &self.contents {
-            write!(fmt, r#" for="{}""#, f.name())?;
-        }
-        if let Some(s) = &self.label {
-            write!(fmt, r#">{}</label>{}"#, s, self.contents)
-        } else {
-            write!(fmt, r#"></label>{}"#, self.contents)
+        match (&self.contents, &self.label) {
+            (ItemContents::Single(Field::Submit(_)), None) => write!(fmt, "{}", self.contents),
+            (ItemContents::Single(f), Some(l)) => write!(
+                fmt,
+                r#"<label for="{}">{}</label>{}"#,
+                f.name(),
+                l,
+                self.contents
+            ),
+            (_, Some(l)) => write!(fmt, r#"<label>{}</label>{}"#, l, self.contents),
+            (_, None) => write!(fmt, "{}", self.contents),
         }
     }
 }
