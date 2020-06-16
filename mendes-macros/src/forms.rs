@@ -103,7 +103,12 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
         }
     }
 
-    let submit = syn::LitStr::new(&meta.submit, Span::call_site());
+    let FormMeta {
+        action,
+        classes,
+        submit,
+    } = &meta;
+    let submit = syn::LitStr::new(submit, Span::call_site());
     new.extend(quote!(
         mendes::forms::Item {
             label: None,
@@ -117,7 +122,6 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
     ));
 
     let name = &ast.ident;
-    let action = &meta.action;
     let (impl_generics, type_generics, where_clause) = &ast.generics.split_for_impl();
     let display = quote!(
         impl#impl_generics mendes::forms::ToForm for #name#type_generics #where_clause {
@@ -126,6 +130,7 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
                     action: Some(#action.into()),
                     enctype: None,
                     method: Some("post".into()),
+                    classes: #classes,
                     sets: vec![
                         mendes::forms::FieldSet {
                             legend: None,
@@ -145,11 +150,12 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
 pub struct FormMeta {
     action: String,
     submit: String,
+    classes: proc_macro2::TokenStream,
 }
 
 impl Parse for FormMeta {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let (mut action, mut submit) = (None, None);
+        let (mut action, mut submit, mut classes) = (None, None, quote!(vec![]));
         for field in Punctuated::<syn::MetaNameValue, Comma>::parse_terminated(input)? {
             if field.path.is_ident("action") {
                 match field.lit {
@@ -165,6 +171,15 @@ impl Parse for FormMeta {
                     }
                     _ => panic!("expected string value for key 'submit'"),
                 }
+            } else if field.path.is_ident("class") {
+                match field.lit {
+                    syn::Lit::Str(v) => {
+                        let val = v.value();
+                        let iter = val.split(' ');
+                        classes = quote!(vec![#(#iter.into()),*]);
+                    }
+                    _ => panic!("expected string value for key 'class'"),
+                }
             } else {
                 panic!("unexpected field {:?}", field.path.to_token_stream());
             }
@@ -173,6 +188,7 @@ impl Parse for FormMeta {
         Ok(Self {
             action: action.unwrap(),
             submit: submit.unwrap(),
+            classes,
         })
     }
 }

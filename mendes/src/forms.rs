@@ -14,6 +14,7 @@ pub struct Form {
     pub action: Option<Cow<'static, str>>,
     pub enctype: Option<Cow<'static, str>>,
     pub method: Option<Cow<'static, str>>,
+    pub classes: Vec<Cow<'static, str>>,
     pub sets: Vec<FieldSet>,
 }
 
@@ -56,6 +57,16 @@ impl fmt::Display for Form {
         }
         if let Some(s) = &self.method {
             write!(fmt, r#" method="{}""#, s)?;
+        }
+        if !self.classes.is_empty() {
+            write!(fmt, r#" class=""#)?;
+            for (i, s) in self.classes.iter().enumerate() {
+                match i {
+                    0 => write!(fmt, "{}", s)?,
+                    _ => write!(fmt, " {}", s)?,
+                }
+            }
+            write!(fmt, "\"")?;
         }
         write!(fmt, ">")?;
         for set in &self.sets {
