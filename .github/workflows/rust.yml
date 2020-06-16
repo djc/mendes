@@ -12,6 +12,9 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         rust: [stable, beta]
         exclude:
+          # Disable beta CI due to https://github.com/rust-lang/rust/issues/73223
+          - os: ubuntu-latest
+            rust: beta
           - os: macos-latest
             rust: beta
           - os: windows-latest
