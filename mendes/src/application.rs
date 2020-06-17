@@ -1,3 +1,4 @@
+use std::error::Error as StdError;
 use std::fmt;
 use std::net::SocketAddr;
 use std::str;
@@ -31,21 +32,21 @@ pub trait Application: Sized {
     fn from_body_bytes<'de, T: serde::de::Deserialize<'de>>(
         req: &Parts,
         bytes: &'de [u8],
-    ) -> Result<T, Self::Error> {
-        from_bytes::<T>(req, bytes).map_err(|e| e.into())
+    ) -> Result<T, FromBodyError> {
+        from_bytes::<T>(req, bytes)
     }
 
     #[cfg(feature = "with-http-body")]
     async fn from_body<T: serde::de::DeserializeOwned>(
         req: &Parts,
         body: Self::RequestBody,
-    ) -> Result<T, Self::Error>
+    ) -> Result<T, FromBodyError>
     where
         Self::RequestBody: HttpBody + Send,
         <Self::RequestBody as HttpBody>::Data: Send,
-        Self::Error: From<<Self::RequestBody as HttpBody>::Error>,
+        <Self::RequestBody as HttpBody>::Error: Into<Box<dyn StdError + Sync + Send>>,
     {
-        from_body::<Self::RequestBody, Self::Error, T>(req, body).await
+        from_body::<Self::RequestBody, T>(req, body).await
     }
 
     #[cfg(feature = "with-http-body")]
@@ -219,59 +220,90 @@ impl<'a, A: Application> FromContext<'a, A> for i32 {
 #[cfg(feature = "with-http-body")]
 // TODO: the duplication between from_bytes() and from_body() is ugly, but I'm not sure how
 // to abstract over the difference in serde bounds.
-async fn from_body<B, E, T: serde::de::DeserializeOwned>(req: &Parts, body: B) -> Result<T, E>
+async fn from_body<B, T: serde::de::DeserializeOwned>(
+    req: &Parts,
+    body: B,
+) -> Result<T, FromBodyError>
 where
     B: HttpBody,
-    E: From<B::Error> + From<ClientError>,
+    B::Error: Into<Box<dyn StdError + Send + Sync>>,
 {
-    let bytes = to_bytes(body).await.map_err(|_| ClientError::BadRequest)?;
-
-    let inner = match req.headers.get("content-type") {
+    let bytes = to_bytes(body)
+        .await
+        .map_err(|e| FromBodyError::Receive(e.into()))?;
+    match req.headers.get("content-type") {
         #[cfg(feature = "serde_urlencoded")]
         Some(t) if t == "application/x-www-form-urlencoded" => {
             serde_urlencoded::from_bytes::<T>(&bytes)
-                .map_err(|_| ClientError::UnprocessableEntity)?
+                .map_err(|e| FromBodyError::Deserialize(e.into()))
         }
         #[cfg(feature = "serde_json")]
         Some(t) if t == "application/json" => {
-            serde_json::from_slice::<T>(&bytes).map_err(|_| ClientError::UnprocessableEntity)?
+            serde_json::from_slice::<T>(&bytes).map_err(|e| FromBodyError::Deserialize(e.into()))
         }
         #[cfg(feature = "uploads")]
         Some(t) if t.as_bytes().starts_with(b"multipart/form-data") => {
             crate::forms::from_form_data::<T>(&req.headers, &bytes)
-                .map_err(|_| ClientError::UnprocessableEntity)?
+                .map_err(|e| FromBodyError::Deserialize(e.into()))
         }
-        None => return Err(ClientError::BadRequest.into()),
-        _ => return Err(ClientError::UnsupportedMediaType.into()),
-    };
-
-    Ok(inner)
+        None => Err(FromBodyError::NoType),
+        _ => Err(FromBodyError::UnknownType),
+    }
 }
 
 fn from_bytes<'de, T: serde::de::Deserialize<'de>>(
     req: &Parts,
     bytes: &'de [u8],
-) -> Result<T, ClientError> {
-    let inner = match req.headers.get("content-type") {
+) -> Result<T, FromBodyError> {
+    match req.headers.get("content-type") {
         #[cfg(feature = "serde_urlencoded")]
         Some(t) if t == "application/x-www-form-urlencoded" => {
             serde_urlencoded::from_bytes::<T>(&bytes)
-                .map_err(|_| ClientError::UnprocessableEntity)?
+                .map_err(|e| FromBodyError::Deserialize(e.into()))
         }
         #[cfg(feature = "serde_json")]
         Some(t) if t == "application/json" => {
-            serde_json::from_slice::<T>(&bytes).map_err(|_| ClientError::UnprocessableEntity)?
+            serde_json::from_slice::<T>(&bytes).map_err(|e| FromBodyError::Deserialize(e.into()))
         }
         #[cfg(feature = "uploads")]
         Some(t) if t.as_bytes().starts_with(b"multipart/form-data") => {
             crate::forms::from_form_data::<T>(&req.headers, &bytes)
-                .map_err(|_| ClientError::UnprocessableEntity)?
+                .map_err(|e| FromBodyError::Deserialize(e.into()))
         }
-        None => return Err(ClientError::BadRequest.into()),
-        _ => return Err(ClientError::UnsupportedMediaType.into()),
-    };
+        None => Err(FromBodyError::NoType),
+        _ => Err(FromBodyError::UnknownType),
+    }
+}
 
-    Ok(inner)
+pub enum FromBodyError {
+    Receive(Box<dyn StdError + Send + Sync>),
+    Deserialize(Box<dyn StdError + Send + Sync>),
+    NoType,
+    UnknownType,
+}
+
+impl fmt::Display for FromBodyError {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use FromBodyError::*;
+        match self {
+            Receive(e) => write!(fmt, "{}", e),
+            Deserialize(e) => write!(fmt, "{}", e),
+            NoType => write!(fmt, "no Content-Type found in request"),
+            UnknownType => write!(fmt, "unsupported Content-Type in request"),
+        }
+    }
+}
+
+impl From<FromBodyError> for ClientError {
+    fn from(e: FromBodyError) -> ClientError {
+        use FromBodyError::*;
+        match e {
+            Receive(_) => ClientError::BadRequest,
+            Deserialize(_) => ClientError::UnprocessableEntity,
+            NoType => ClientError::BadRequest,
+            UnknownType => ClientError::UnsupportedMediaType,
+        }
+    }
 }
 
 #[cfg(feature = "with-http-body")]
