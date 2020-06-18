@@ -332,6 +332,9 @@ impl<'de, 'a> serde::de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 }
 
+// Note that we have maps at two levels: the top level as well as the fields
+// inside a `File` object (`Part::Blob` variant). This is especially relevant
+// when deciding to return `Ok(None)` from `next_key_seed()`.
 impl<'de, 'a> MapAccess<'de> for &'a mut Deserializer<'de> {
     type Error = Error;
 
@@ -341,6 +344,10 @@ impl<'de, 'a> MapAccess<'de> for &'a mut Deserializer<'de> {
     {
         let split_len = self.boundary.len();
         if self.state.is_none() && self.input.starts_with(&self.boundary) {
+            if &self.input[split_len..split_len + 4] == b"--\r\n" {
+                return Ok(None);
+            }
+
             let (len, part) = Part::from_bytes(&self.input[split_len + 2..], &self.boundary)?;
             self.state = Some((State::Name, part));
             self.input = &self.input[split_len + 2 + len..];
@@ -379,7 +386,10 @@ impl<'de, 'a> MapAccess<'de> for &'a mut Deserializer<'de> {
             Some((State::Name, _)) => unreachable!(),
             Some((State::Filename, part)) => Some((State::Type, part)),
             Some((State::Type, part)) => Some((State::Data, part)),
-            Some((State::Data, part)) => Some((State::End, part)),
+            Some((State::Data, part)) => match part {
+                Part::Blob { .. } => Some((State::End, part)),
+                Part::Text { .. } => None,
+            },
             Some((State::End, _)) => unreachable!(),
             None => None,
         };
@@ -608,17 +618,23 @@ mod tests {
 Content-Disposition: form-data; name=\"foo\"\r
 \r
 Foo\r
------------------------------345106847831590504122057183932--";
+-----------------------------345106847831590504122057183932\r
+Content-Disposition: form-data; name=\"val\"\r
+\r
+1\r
+-----------------------------345106847831590504122057183932--\r\n";
 
         let mut headers = HeaderMap::new();
         headers.insert("content-type", ctype.try_into().unwrap());
         let form = from_form_data::<EnumForm>(&headers, body.as_bytes()).unwrap();
         assert_eq!(form.foo, FooBar::Foo);
+        assert_eq!(form.val, 1);
     }
 
     #[derive(Deserialize)]
     struct EnumForm {
         foo: FooBar,
+        val: i32,
     }
 
     #[derive(Debug, Deserialize, PartialEq)]
