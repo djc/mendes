@@ -9,12 +9,12 @@ fn test_model() {
     let sql = table.to_string();
     assert_eq!(
         sql,
-        "CREATE TYPE Foo AS ENUM('Bar', 'Baz'); \
+        "CREATE TYPE \"Foo\" AS ENUM('Bar', 'Baz'); \
          CREATE TABLE nameds (\
              id serial NOT NULL, \
              name text NOT NULL, \
              num bigint NOT NULL, \
-             foo Foo NOT NULL, \
+             foo \"Foo\" NOT NULL, \
              wrap integer NOT NULL, \
              CONSTRAINT nameds_pkey PRIMARY KEY (id)\
          )"
