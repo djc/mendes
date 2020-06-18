@@ -3,7 +3,9 @@ use std::str::{self, FromStr};
 
 use http::HeaderMap;
 use httparse;
-use serde::de::{DeserializeSeed, Error as ErrorTrait, MapAccess, Visitor};
+use serde::de::{
+    DeserializeSeed, EnumAccess, Error as ErrorTrait, MapAccess, VariantAccess, Visitor,
+};
 use serde::Deserialize;
 use twoway::find_bytes;
 
@@ -63,7 +65,10 @@ impl<'de, 'a> serde::de::Deserializer<'de> for &'a mut Deserializer<'de> {
                 Part::Text { .. } => unreachable!(),
             },
             Some((State::Type, _)) => visitor.visit_borrowed_str("type"),
-            Some((State::Data, _)) => visitor.visit_borrowed_str("data"),
+            Some((State::Data, part)) => match part {
+                Part::Blob { .. } => visitor.visit_borrowed_str("data"),
+                Part::Text { .. } => self.deserialize_str(visitor),
+            },
             _ => unreachable!(),
         }
     }
@@ -318,12 +323,12 @@ impl<'de, 'a> serde::de::Deserializer<'de> for &'a mut Deserializer<'de> {
         self,
         _name: &'static str,
         _variants: &'static [&'static str],
-        _: V,
+        visitor: V,
     ) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        visitor.visit_enum(Enum { de: self })
     }
 }
 
@@ -379,6 +384,51 @@ impl<'de, 'a> MapAccess<'de> for &'a mut Deserializer<'de> {
             None => None,
         };
         res
+    }
+}
+
+struct Enum<'a, 'de: 'a> {
+    de: &'a mut Deserializer<'de>,
+}
+
+impl<'de, 'a> EnumAccess<'de> for Enum<'a, 'de> {
+    type Error = Error;
+    type Variant = Self;
+
+    fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant)>
+    where
+        V: DeserializeSeed<'de>,
+    {
+        Ok((seed.deserialize(&mut *self.de)?, self))
+    }
+}
+
+impl<'de, 'a> VariantAccess<'de> for Enum<'a, 'de> {
+    type Error = Error;
+
+    fn unit_variant(self) -> Result<()> {
+        Ok(())
+    }
+
+    fn newtype_variant_seed<T>(self, seed: T) -> Result<T::Value>
+    where
+        T: DeserializeSeed<'de>,
+    {
+        seed.deserialize(self.de)
+    }
+
+    fn tuple_variant<V>(self, _len: usize, _visitor: V) -> Result<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        unimplemented!()
+    }
+
+    fn struct_variant<V>(self, _fields: &'static [&'static str], _visitor: V) -> Result<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        unimplemented!()
     }
 }
 
@@ -549,5 +599,31 @@ mod tests {
         #[serde(borrow)]
         file: File<'a>,
         asset: i32,
+    }
+
+    #[test]
+    fn enum_field() {
+        let ctype = "multipart/form-data; boundary=---------------------------345106847831590504122057183932";
+        let body = "-----------------------------345106847831590504122057183932\r
+Content-Disposition: form-data; name=\"foo\"\r
+\r
+Foo\r
+-----------------------------345106847831590504122057183932--";
+
+        let mut headers = HeaderMap::new();
+        headers.insert("content-type", ctype.try_into().unwrap());
+        let form = from_form_data::<EnumForm>(&headers, body.as_bytes()).unwrap();
+        assert_eq!(form.foo, FooBar::Foo);
+    }
+
+    #[derive(Deserialize)]
+    struct EnumForm {
+        foo: FooBar,
+    }
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    enum FooBar {
+        Foo,
+        Bar,
     }
 }
