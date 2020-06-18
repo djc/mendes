@@ -273,7 +273,11 @@ pub struct Checkbox {
 
 impl fmt::Display for Checkbox {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(fmt, r#"<input type="checkbox" name="{}" value="true""#, self.name)?;
+        write!(
+            fmt,
+            r#"<input type="checkbox" name="{}" value="true""#,
+            self.name
+        )?;
         if self.checked {
             write!(fmt, " checked")?;
         }
