@@ -103,7 +103,7 @@ impl Item {
     fn set<T: fmt::Display>(&mut self, name: &str, value: &T) -> Result<(), ()> {
         match &mut self.contents {
             ItemContents::Single(f) => {
-                if f.name() == name {
+                if f.name() == Some(name) {
                     match f {
                         Field::Checkbox(f) => {
                             let s = value.to_string();
@@ -187,7 +187,7 @@ impl fmt::Display for Item {
             (ItemContents::Single(f), Some(l)) => write!(
                 fmt,
                 r#"<label for="{}">{}</label>{}"#,
-                f.name(),
+                f.name().unwrap(),
                 l,
                 self.contents
             ),
@@ -231,19 +231,19 @@ pub enum Field {
 }
 
 impl Field {
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> Option<&str> {
         use Field::*;
         match self {
-            Checkbox(f) => &f.name,
-            Date(f) => &f.name,
-            Email(f) => &f.name,
-            File(f) => &f.name,
-            Hidden(f) => &f.name,
-            Number(f) => &f.name,
-            Password(f) => &f.name,
-            Select(f) => &f.name,
-            Submit(f) => &f.name,
-            Text(f) => &f.name,
+            Checkbox(f) => Some(&f.name),
+            Date(f) => Some(&f.name),
+            Email(f) => Some(&f.name),
+            File(f) => Some(&f.name),
+            Hidden(f) => Some(&f.name),
+            Number(f) => Some(&f.name),
+            Password(f) => Some(&f.name),
+            Select(f) => Some(&f.name),
+            Text(f) => Some(&f.name),
+            Submit(_) => None,
         }
     }
 }
@@ -412,7 +412,6 @@ impl fmt::Display for SelectOption {
 }
 
 pub struct Submit {
-    pub name: Cow<'static, str>,
     pub value: Cow<'static, str>,
 }
 
@@ -420,8 +419,8 @@ impl fmt::Display for Submit {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             fmt,
-            r#"<input type="submit" name="{}" value="{}">"#,
-            self.name, self.value
+            r#"<input type="submit" value="{}">"#,
+            self.value
         )
     }
 }

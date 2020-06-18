@@ -114,7 +114,6 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
             label: None,
             contents: mendes::forms::ItemContents::Single(
                 mendes::forms::Field::Submit(mendes::forms::Submit {
-                    name: "submit".into(),
                     value: #submit.into(),
                 })
             ),
