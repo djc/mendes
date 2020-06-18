@@ -417,11 +417,7 @@ pub struct Submit {
 
 impl fmt::Display for Submit {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            fmt,
-            r#"<input type="submit" value="{}">"#,
-            self.value
-        )
+        write!(fmt, r#"<input type="submit" value="{}">"#, self.value)
     }
 }
 
