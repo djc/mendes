@@ -25,13 +25,12 @@ This should definitely become more minimal over time.
 
 ```rust
 use async_trait::async_trait;
-use http::{Request, Response, StatusCode};
+use http::{Response, StatusCode};
 use hyper::Body;
-use mendes::{Application, Context};
-use mendes_derive::{dispatch, handler};
+use mendes::{dispatch, get, Application, ClientError, Context};
 
-#[handler(App)]
-async fn hello(_: &App, _: Request<()>) -> Result<Response<Body>, Error> {
+#[get]
+async fn hello(_: &App) -> Result<Response<Body>, Error> {
     Ok(Response::builder()
         .status(StatusCode::OK)
         .body("Hello, world".into())
@@ -62,7 +61,15 @@ impl Application for App {
 }
 
 #[derive(Debug)]
-enum Error {}
+enum Error {
+    Client(ClientError),
+}
+
+impl From<ClientError> for Error {
+    fn from(e: ClientError) -> Error {
+        Error::Client(e)
+    }
+}
 ```
 
 All feedback welcome. Feel free to file bugs, requests for documentation and
