@@ -1,6 +1,6 @@
 [package]
 name = "mendes"
-version = "0.0.28"
+version = "0.0.29"
 authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
 description = "Rust web toolkit for impatient perfectionists"
 documentation = "https://docs.rs/mendes"
