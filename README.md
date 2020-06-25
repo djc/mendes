@@ -3,6 +3,7 @@
 [![Documentation](https://docs.rs/mendes/badge.svg)](https://docs.rs/mendes/)
 [![Crates.io](https://img.shields.io/crates/v/mendes.svg)](https://crates.io/crates/mendes)
 [![Build status](https://github.com/djc/mendes/workflows/CI/badge.svg)](https://github.com/djc/mendes/actions?query=workflow%3ACI)
+[![Coverage status](https://codecov.io/gh/djc/mendes/branch/master/graph/badge.svg)](https://codecov.io/gh/djc/mendes)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE-MIT)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE-APACHE)
 
