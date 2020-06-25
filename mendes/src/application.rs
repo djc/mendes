@@ -150,6 +150,12 @@ where
     pub fn headers(&self) -> &http::HeaderMap {
         &self.req.headers
     }
+
+    #[doc(hidden)]
+    pub fn query<'de, T: serde::de::Deserialize<'de>>(&'de self) -> Result<T, ClientError> {
+        let query = self.req.uri.query().ok_or(ClientError::BadRequest)?;
+        serde_urlencoded::from_bytes::<T>(query.as_bytes()).map_err(|_| ClientError::BadRequest)
+    }
 }
 
 pub trait FromContext<'a, A>: Sized
@@ -232,7 +238,6 @@ where
         .await
         .map_err(|e| FromBodyError::Receive(e.into()))?;
     match req.headers.get("content-type") {
-        #[cfg(feature = "serde_urlencoded")]
         Some(t) if t == "application/x-www-form-urlencoded" => {
             serde_urlencoded::from_bytes::<T>(&bytes)
                 .map_err(|e| FromBodyError::Deserialize(e.into()))
@@ -256,7 +261,6 @@ fn from_bytes<'de, T: serde::de::Deserialize<'de>>(
     bytes: &'de [u8],
 ) -> Result<T, FromBodyError> {
     match req.headers.get("content-type") {
-        #[cfg(feature = "serde_urlencoded")]
         Some(t) if t == "application/x-www-form-urlencoded" => {
             serde_urlencoded::from_bytes::<T>(&bytes)
                 .map_err(|e| FromBodyError::Deserialize(e.into()))

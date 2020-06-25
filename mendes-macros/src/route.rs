@@ -24,7 +24,7 @@ where
         syn::parse::<MethodArgs>(quote!(mut cx: mendes::application::Context<#app_type>).into())
             .unwrap();
     let old = mem::replace(&mut ast.sig.inputs, new.args);
-    let (mut args, mut rest) = (vec![], None);
+    let (mut args, mut rest, mut query) = (vec![], None, None);
     for (i, arg) in old.iter().enumerate() {
         if i == 0 {
             // this is the Application argument
@@ -40,6 +40,9 @@ where
         if let Some(attr) = typed.attrs.first() {
             if attr.path.is_ident("rest") {
                 rest = Some(pat);
+                continue;
+            } else if attr.path.is_ident("query") {
+                query = Some((pat, ty));
                 continue;
             }
         }
@@ -85,6 +88,15 @@ where
         block.push(Statement::get(
             quote!(
                 let #pat = cx.path.rest(&cx.req.uri.path());
+            )
+            .into(),
+        ));
+    }
+
+    if let Some((pat, ty)) = query {
+        block.push(Statement::get(
+            quote!(
+                let #pat = cx.query::<#ty>()?;
             )
             .into(),
         ));
