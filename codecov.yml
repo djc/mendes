@@ -1,0 +1,2 @@
+ignore:
+  - "mendes-macros" # coverage of procedural macros has not been set up
