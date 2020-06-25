@@ -32,6 +32,26 @@ pub fn from_form_data<'a, T: Deserialize<'a>>(
     T::deserialize(&mut deserializer)
 }
 
+macro_rules! parse_value_type {
+    ($($ty:ident => ($visit_method:ident, $deserializer_method:ident),)*) => {
+        $(
+            fn $deserializer_method<V>(self, visitor: V) -> Result<V::Value>
+                where V: Visitor<'de>
+            {
+                if let Some((State::Data, Part::Text { data, .. })) = self.state {
+                    let s = str::from_utf8(data)
+                        .map_err(|_| Error::custom("invalid input while UTF-8 decoding for $ty"))?;
+                    visitor.$visit_method(
+                        $ty::from_str(s).map_err(|_| Error::custom("unable to convert str to $ty"))?,
+                    )
+                } else {
+                    unreachable!()
+                }
+            }
+        )*
+    }
+}
+
 pub struct Deserializer<'de> {
     input: &'de [u8],
     boundary: Vec<u8>,
@@ -80,99 +100,33 @@ impl<'de, 'a> serde::de::Deserializer<'de> for &'a mut Deserializer<'de> {
         unimplemented!()
     }
 
-    fn deserialize_bool<V>(self, _: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        unimplemented!()
-        //visitor.visit_bool(self.parse_bool()?)
+    parse_value_type! {
+        bool => (visit_bool, deserialize_bool),
+        u8 => (visit_u8, deserialize_u8),
+        u16 => (visit_u16, deserialize_u16),
+        u32 => (visit_u32, deserialize_u32),
+        u64 => (visit_u64, deserialize_u64),
+        i8 => (visit_i8, deserialize_i8),
+        i16 => (visit_i16, deserialize_i16),
+        i32 => (visit_i32, deserialize_i32),
+        i64 => (visit_i64, deserialize_i64),
+        f32 => (visit_f32, deserialize_f32),
+        f64 => (visit_f64, deserialize_f64),
     }
 
-    fn deserialize_i8<V>(self, _: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        unimplemented!()
-        //visitor.visit_i8(self.parse_signed()?)
-    }
-
-    fn deserialize_i16<V>(self, _: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        unimplemented!()
-        //visitor.visit_i16(self.parse_signed()?)
-    }
-
-    fn deserialize_i32<V>(self, visitor: V) -> Result<V::Value>
+    fn deserialize_char<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
         if let Some((State::Data, Part::Text { data, .. })) = self.state {
             let s = str::from_utf8(data)
                 .map_err(|_| Error::custom("invalid input while UTF-8 decoding for i32"))?;
-            visitor.visit_i32(
-                i32::from_str(s).map_err(|_| Error::custom("unable to convert str to i32"))?,
+            visitor.visit_char(
+                char::from_str(s).map_err(|_| Error::custom("unable to convert str to $ty"))?,
             )
         } else {
             unreachable!()
         }
-    }
-
-    fn deserialize_i64<V>(self, _: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_u8<V>(self, _: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_u16<V>(self, _: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_u32<V>(self, _: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_u64<V>(self, _: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_f32<V>(self, _visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_f64<V>(self, _visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_char<V>(self, _visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        unimplemented!()
     }
 
     fn deserialize_str<V>(self, visitor: V) -> Result<V::Value>
@@ -219,11 +173,16 @@ impl<'de, 'a> serde::de::Deserializer<'de> for &'a mut Deserializer<'de> {
         visitor.visit_borrowed_bytes(data)
     }
 
-    fn deserialize_byte_buf<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unimplemented!()
+        let data = match self.state.as_ref() {
+            Some((_, Part::Blob { data, .. })) => data,
+            Some((_, Part::Text { data, .. })) => data,
+            None => unreachable!(),
+        };
+        visitor.visit_byte_buf(data.to_vec())
     }
 
     fn deserialize_option<V>(self, visitor: V) -> Result<V::Value>
