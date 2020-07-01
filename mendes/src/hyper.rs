@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use futures_util::future::FutureExt;
 use http::request::Parts;
 use hyper::service::{make_service_fn, service_fn};
+use hyper::server::conn::AddrStream;
 
 use super::{Application, Context};
 use crate::application::{FromContext, PathState, Server};
@@ -22,10 +23,12 @@ where
     async fn serve(self: Self, addr: &SocketAddr) -> Result<(), hyper::Error> {
         let app = Arc::new(self);
         hyper::Server::bind(addr)
-            .serve(make_service_fn(move |_| {
+            .serve(make_service_fn(move |addr: &AddrStream| {
+                let addr = addr.remote_addr();
                 let app = app.clone();
-                async {
-                    Ok::<_, Infallible>(service_fn(move |req| {
+                async move {
+                    Ok::<_, Infallible>(service_fn(move |mut req| {
+                        req.extensions_mut().insert(ClientAddr(addr.clone()));
                         let cx = Context::new(app.clone(), req);
                         A::handle(cx).map(Ok::<_, Infallible>)
                     }))
@@ -48,5 +51,15 @@ where
             Some(body) => Ok(body),
             None => panic!("attempted to retrieve body twice"),
         }
+    }
+}
+
+pub struct ClientAddr(SocketAddr);
+
+impl std::ops::Deref for ClientAddr {
+    type Target = SocketAddr;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
