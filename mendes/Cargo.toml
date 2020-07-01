@@ -13,7 +13,7 @@ workspace = ".."
 readme = "../README.md"
 
 [features]
-application = ["http", "serde_urlencoded"]
+application = ["http", "mendes-macros", "serde_urlencoded"]
 cookies = ["http", "bincode", "data-encoding", "mendes-macros", "ring", "serde/derive"]
 forms = ["mendes-macros", "serde_urlencoded", "serde/derive"]
 json = ["serde_json"]
