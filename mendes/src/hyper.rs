@@ -28,7 +28,7 @@ where
                 let app = app.clone();
                 async move {
                     Ok::<_, Infallible>(service_fn(move |mut req| {
-                        req.extensions_mut().insert(ClientAddr(addr.clone()));
+                        req.extensions_mut().insert(ClientAddr(addr));
                         let cx = Context::new(app.clone(), req);
                         A::handle(cx).map(Ok::<_, Infallible>)
                     }))

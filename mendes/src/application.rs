@@ -8,8 +8,6 @@ use std::sync::Arc;
 use async_trait::async_trait;
 #[cfg(feature = "with-http-body")]
 use bytes::{Buf, BufMut, Bytes};
-#[cfg(feature = "with-http-body")]
-use futures_util;
 use http::header::LOCATION;
 use http::request::Parts;
 use http::Request;

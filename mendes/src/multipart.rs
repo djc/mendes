@@ -2,7 +2,6 @@ use std::fmt::{self, Display};
 use std::str::{self, FromStr};
 
 use http::HeaderMap;
-use httparse;
 use serde::de::{
     DeserializeSeed, EnumAccess, Error as ErrorTrait, MapAccess, VariantAccess, Visitor,
 };
