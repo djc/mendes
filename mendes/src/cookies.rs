@@ -75,7 +75,8 @@ pub fn store<T: CookieData>(name: &str, key: &Key, data: T) -> Result<HeaderValu
 }
 
 pub fn tombstone(name: &str) -> Result<HeaderValue, ()> {
-    HeaderValue::try_from(format!("{}=", name)).map_err(|_| ())
+    HeaderValue::try_from(format!("{}=; expires=Thu, 01 Jan 1970 00:00:00 GMT", name))
+        .map_err(|_| ())
 }
 
 pub trait CookieData: DeserializeOwned + Serialize {
