@@ -13,8 +13,6 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 pub fn extract<T: CookieData>(name: &str, key: &Key, headers: &HeaderMap) -> Option<T> {
     let cookies = headers.get("cookie")?;
     let cookies = str::from_utf8(cookies.as_ref()).ok()?;
-
-    let mut found = None;
     for cookie in cookies.split(';') {
         let cookie = cookie.trim_start();
         if cookie.len() < (name.len() + 1 + NONCE_LEN + TAG_LEN) {
@@ -27,26 +25,40 @@ pub fn extract<T: CookieData>(name: &str, key: &Key, headers: &HeaderMap) -> Opt
             continue;
         }
 
-        found = Some(&cookie[name.len() + 1..]);
+        let encoded = &cookie[name.len() + 1..];
+        let mut bytes = match BASE64URL_NOPAD.decode(encoded.as_bytes()).ok() {
+            Some(bytes) => bytes,
+            None => continue,
+        };
+
+        if bytes.len() <= NONCE_LEN {
+            continue;
+        }
+
+        let ad = aead::Aad::from(name.as_bytes());
+        let (nonce, mut sealed) = bytes.split_at_mut(NONCE_LEN);
+        let nonce = match aead::Nonce::try_assume_unique_for_key(nonce).ok() {
+            Some(nonce) => nonce,
+            None => continue,
+        };
+        let plain = match key.0.open_in_place(nonce, ad, &mut sealed).ok() {
+            Some(plain) => plain,
+            None => continue,
+        };
+
+        let cookie = match bincode::deserialize::<Cookie<T>>(plain).ok() {
+            Some(cookie) => cookie,
+            None => continue,
+        };
+
+        if cookie.expires < SystemTime::now() {
+            continue;
+        }
+
+        return Some(cookie.data);
     }
 
-    let encoded = found?;
-    let mut bytes = BASE64URL_NOPAD.decode(encoded.as_bytes()).ok()?;
-    if bytes.len() <= NONCE_LEN {
-        return None;
-    }
-
-    let ad = aead::Aad::from(name.as_bytes());
-    let (nonce, mut sealed) = bytes.split_at_mut(NONCE_LEN);
-    let nonce = aead::Nonce::try_assume_unique_for_key(nonce).ok()?;
-    let plain = key.0.open_in_place(nonce, ad, &mut sealed).ok()?;
-
-    let cookie = bincode::deserialize::<Cookie<T>>(plain).ok()?;
-    if cookie.expires < SystemTime::now() {
-        return None;
-    }
-
-    Some(cookie.data)
+    None
 }
 
 pub fn store<T: CookieData>(name: &str, key: &Key, data: T) -> Result<HeaderValue, ()> {
