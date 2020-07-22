@@ -453,7 +453,9 @@ impl ToField for String {
     fn to_field(name: Cow<'static, str>, params: &[(&str, &str)]) -> Field {
         for (key, value) in params {
             if *key == "type" {
-                if *value == "email" {
+                if *value == "hidden" {
+                    return Field::Hidden(Hidden::from_params(name, params));
+                } else if *value == "email" {
                     return Field::Email(Email { name, value: None });
                 } else if *value == "password" {
                     return Field::Password(Password { name, value: None });
@@ -468,7 +470,9 @@ impl ToField for Cow<'_, str> {
     fn to_field(name: Cow<'static, str>, params: &[(&str, &str)]) -> Field {
         for (key, value) in params {
             if *key == "type" {
-                if *value == "email" {
+                if *value == "hidden" {
+                    return Field::Hidden(Hidden::from_params(name, params));
+                } else if *value == "email" {
                     return Field::Email(Email { name, value: None });
                 } else if *value == "password" {
                     return Field::Password(Password { name, value: None });
