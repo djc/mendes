@@ -1,4 +1,5 @@
 use std::convert::{TryFrom, TryInto};
+use std::fmt::Write;
 use std::str;
 use std::time::{Duration, SystemTime};
 
@@ -82,13 +83,25 @@ pub fn store<T: CookieData>(name: &str, key: &Key, data: T) -> Result<HeaderValu
         .map_err(|_| ())?;
     tag.copy_from_slice(ad_tag.as_ref());
 
-    let s = format!("{}={}", name, BASE64URL_NOPAD.encode(&data));
+    let mut s = format!("{}={}; Path=/", name, BASE64URL_NOPAD.encode(&data));
+    if let Some(duration) = T::expires() {
+        let expires = chrono::Utc::now() + chrono::Duration::from_std(duration).map_err(|_| ())?;
+        write!(
+            s,
+            "; Expires={}",
+            expires.format("%a, %d %b %Y %H:%M:%S GMT")
+        )
+        .map_err(|_| ())?;
+    }
     HeaderValue::try_from(s).map_err(|_| ())
 }
 
 pub fn tombstone(name: &str) -> Result<HeaderValue, ()> {
-    HeaderValue::try_from(format!("{}=; expires=Thu, 01 Jan 1970 00:00:00 GMT", name))
-        .map_err(|_| ())
+    HeaderValue::try_from(format!(
+        "{}=None; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+        name
+    ))
+    .map_err(|_| ())
 }
 
 pub trait CookieData: DeserializeOwned + Serialize {
