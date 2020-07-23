@@ -247,9 +247,28 @@ from_context_from_str!(u64);
 from_context_from_str!(u128);
 from_context_from_str!(usize);
 
+macro_rules! deserialize_body {
+    ($req:ident, $bytes:ident) => {
+        match $req.headers.get("content-type") {
+            Some(t) if t == "application/x-www-form-urlencoded" => {
+                serde_urlencoded::from_bytes::<T>(&$bytes)
+                    .map_err(|e| FromBodyError::Deserialize(e.into()))
+            }
+            #[cfg(feature = "serde_json")]
+            Some(t) if t == "application/json" => serde_json::from_slice::<T>(&$bytes)
+                .map_err(|e| FromBodyError::Deserialize(e.into())),
+            #[cfg(feature = "uploads")]
+            Some(t) if t.as_bytes().starts_with(b"multipart/form-data") => {
+                crate::forms::from_form_data::<T>(&$req.headers, &$bytes)
+                    .map_err(|e| FromBodyError::Deserialize(e.into()))
+            }
+            None => Err(FromBodyError::NoType),
+            _ => Err(FromBodyError::UnknownType),
+        }
+    };
+}
+
 #[cfg(feature = "with-http-body")]
-// TODO: the duplication between from_bytes() and from_body() is ugly, but I'm not sure how
-// to abstract over the difference in serde bounds.
 async fn from_body<B, T: serde::de::DeserializeOwned>(
     req: &Parts,
     body: B,
@@ -261,46 +280,14 @@ where
     let bytes = to_bytes(body)
         .await
         .map_err(|e| FromBodyError::Receive(e.into()))?;
-    match req.headers.get("content-type") {
-        Some(t) if t == "application/x-www-form-urlencoded" => {
-            serde_urlencoded::from_bytes::<T>(&bytes)
-                .map_err(|e| FromBodyError::Deserialize(e.into()))
-        }
-        #[cfg(feature = "serde_json")]
-        Some(t) if t == "application/json" => {
-            serde_json::from_slice::<T>(&bytes).map_err(|e| FromBodyError::Deserialize(e.into()))
-        }
-        #[cfg(feature = "uploads")]
-        Some(t) if t.as_bytes().starts_with(b"multipart/form-data") => {
-            crate::forms::from_form_data::<T>(&req.headers, &bytes)
-                .map_err(|e| FromBodyError::Deserialize(e.into()))
-        }
-        None => Err(FromBodyError::NoType),
-        _ => Err(FromBodyError::UnknownType),
-    }
+    deserialize_body!(req, bytes)
 }
 
 fn from_bytes<'de, T: serde::de::Deserialize<'de>>(
     req: &Parts,
     bytes: &'de [u8],
 ) -> Result<T, FromBodyError> {
-    match req.headers.get("content-type") {
-        Some(t) if t == "application/x-www-form-urlencoded" => {
-            serde_urlencoded::from_bytes::<T>(&bytes)
-                .map_err(|e| FromBodyError::Deserialize(e.into()))
-        }
-        #[cfg(feature = "serde_json")]
-        Some(t) if t == "application/json" => {
-            serde_json::from_slice::<T>(&bytes).map_err(|e| FromBodyError::Deserialize(e.into()))
-        }
-        #[cfg(feature = "uploads")]
-        Some(t) if t.as_bytes().starts_with(b"multipart/form-data") => {
-            crate::forms::from_form_data::<T>(&req.headers, &bytes)
-                .map_err(|e| FromBodyError::Deserialize(e.into()))
-        }
-        None => Err(FromBodyError::NoType),
-        _ => Err(FromBodyError::UnknownType),
-    }
+    deserialize_body!(req, bytes)
 }
 
 pub enum FromBodyError {
