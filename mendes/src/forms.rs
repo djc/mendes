@@ -32,8 +32,7 @@ impl Form {
     }
 
     pub fn set<T: fmt::Display>(mut self, name: &str, value: T) -> Result<Self, ()> {
-        let res = self
-            .sets
+        self.sets
             .iter_mut()
             .flat_map(|s| &mut s.items)
             .fold(Err(()), |mut res, item| {
@@ -41,8 +40,8 @@ impl Form {
                     res = Ok(());
                 }
                 res
-            });
-        res.map(|_| self)
+            })
+            .map(|_| self)
     }
 }
 
