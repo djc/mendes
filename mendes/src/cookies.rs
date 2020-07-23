@@ -11,6 +11,8 @@ use ring::rand::SecureRandom;
 use ring::{aead, rand};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
+// This should only be used by the `cookie` procedural macro.
+#[doc(hidden)]
 pub fn extract<T: CookieData>(name: &str, key: &Key, headers: &HeaderMap) -> Option<T> {
     let cookies = headers.get("cookie")?;
     let cookies = str::from_utf8(cookies.as_ref()).ok()?;
@@ -62,6 +64,8 @@ pub fn extract<T: CookieData>(name: &str, key: &Key, headers: &HeaderMap) -> Opt
     None
 }
 
+// This should only be used by the `cookie` procedural macro.
+#[doc(hidden)]
 pub fn store<T: CookieData>(name: &str, key: &Key, data: T) -> Result<HeaderValue, ()> {
     let expiration = T::expires().unwrap_or_else(|| Duration::new(NO_EXPIRY, 0));
     let expires = SystemTime::now().checked_add(expiration).ok_or(())?;
@@ -96,6 +100,8 @@ pub fn store<T: CookieData>(name: &str, key: &Key, data: T) -> Result<HeaderValu
     HeaderValue::try_from(s).map_err(|_| ())
 }
 
+// This should only be used by the `cookie` procedural macro.
+#[doc(hidden)]
 pub fn tombstone(name: &str) -> Result<HeaderValue, ()> {
     HeaderValue::try_from(format!(
         "{}=None; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT",
@@ -104,10 +110,22 @@ pub fn tombstone(name: &str) -> Result<HeaderValue, ()> {
     .map_err(|_| ())
 }
 
+/// Data to be stored in a cookie
+///
+/// This is usually derived through the `cookie` procedural attribute macro.
 pub trait CookieData: DeserializeOwned + Serialize {
+    /// The expiry time for the cookie
+    ///
+    /// The `cookie` macro sets this to 6 hours.
     fn expires() -> Option<Duration>;
+
+    /// Read the cookie from the request headers
     fn from_header(key: &Key, headers: &HeaderMap) -> Option<Self>;
+
+    /// Encode and encrypt the cookie into a `String`, to be used in a `Response` header
     fn to_string(self, key: &Key) -> Result<HeaderValue, ()>;
+
+    /// Return an empty cookie such that the user agent will delete an existing cookie
     fn tombstone() -> Result<http::HeaderValue, ()>;
 }
 
@@ -121,18 +139,25 @@ where
     data: T,
 }
 
+/// An encryption key to authenticate and encrypt/decrypt cookie values
+///
+/// This currently uses the ChaCha20-Poly1305 algorithm as defined in RFC 7539.
 pub struct Key(aead::LessSafeKey);
 
 impl Key {
-    pub fn new(secret: &[u8; 32]) -> Result<Self, ()> {
-        Ok(Self(aead::LessSafeKey::new(
-            aead::UnboundKey::new(&aead::CHACHA20_POLY1305, secret).map_err(|_| ())?,
-        )))
+    /// Create a new `Key` from the given secret key
+    pub fn new(secret: &[u8; 32]) -> Self {
+        Self(aead::LessSafeKey::new(
+            aead::UnboundKey::new(&aead::CHACHA20_POLY1305, secret).unwrap(),
+        ))
     }
 
+    /// Create key from slice of hexadecimal characters
+    ///
+    /// This will fail if the length of the slice is not equal to 32.
     pub fn from_hex_lower(s: &[u8]) -> Result<Self, ()> {
         let bytes = HEXLOWER.decode(s).map_err(|_| ())?;
-        Self::new((&*bytes).try_into().unwrap())
+        Ok(Self::new((&*bytes).try_into().map_err(|_| ())?))
     }
 }
 

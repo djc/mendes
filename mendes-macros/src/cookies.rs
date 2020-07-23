@@ -1,6 +1,9 @@
 use proc_macro2::Span;
 use quote::quote;
 
+/// Derive the `mendes::cookies::CookieData` trait For the given struct
+///
+/// Defaults to an expiry time of 6 hours.
 pub fn cookie(ast: &syn::ItemStruct) -> proc_macro2::TokenStream {
     let ident = &ast.ident;
     let name = syn::LitStr::new(&ident.to_string(), Span::call_site());
