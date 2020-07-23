@@ -167,6 +167,37 @@ where
     ) -> Result<Self, A::Error>;
 }
 
+macro_rules! from_context_from_str {
+    ($self:ty) => {
+        impl<'a, A: Application> FromContext<'a, A> for $self {
+            fn from_context(
+                req: &'a Parts,
+                state: &mut PathState,
+                _: &mut Option<A::RequestBody>,
+            ) -> Result<Self, A::Error> {
+                let s = state.next(&req.uri.path()).ok_or(ClientError::NotFound)?;
+                <$self>::from_str(s).map_err(|_| ClientError::NotFound.into())
+            }
+        }
+
+        impl<'a, A: Application> FromContext<'a, A> for Option<$self> {
+            fn from_context(
+                req: &'a Parts,
+                state: &mut PathState,
+                _: &mut Option<A::RequestBody>,
+            ) -> Result<Self, A::Error> {
+                match state.next(&req.uri.path()) {
+                    Some(s) => match <$self>::from_str(s) {
+                        Ok(v) => Ok(Some(v)),
+                        Err(_) => Err(ClientError::NotFound.into()),
+                    },
+                    None => Ok(None),
+                }
+            }
+        }
+    };
+}
+
 impl<'a, A: Application> FromContext<'a, A> for &'a http::request::Parts {
     fn from_context(
         req: &'a Parts,
@@ -199,27 +230,22 @@ impl<'a, A: Application> FromContext<'a, A> for &'a str {
     }
 }
 
-impl<'a, A: Application> FromContext<'a, A> for usize {
-    fn from_context(
-        req: &'a Parts,
-        state: &mut PathState,
-        _: &mut Option<A::RequestBody>,
-    ) -> Result<Self, A::Error> {
-        let s = state.next(&req.uri.path()).ok_or(ClientError::NotFound)?;
-        usize::from_str(s).map_err(|_| ClientError::NotFound.into())
-    }
-}
-
-impl<'a, A: Application> FromContext<'a, A> for i32 {
-    fn from_context(
-        req: &'a Parts,
-        state: &mut PathState,
-        _: &mut Option<A::RequestBody>,
-    ) -> Result<Self, A::Error> {
-        let s = state.next(&req.uri.path()).ok_or(ClientError::NotFound)?;
-        i32::from_str(s).map_err(|_| ClientError::NotFound.into())
-    }
-}
+from_context_from_str!(bool);
+from_context_from_str!(char);
+from_context_from_str!(f32);
+from_context_from_str!(f64);
+from_context_from_str!(i8);
+from_context_from_str!(i16);
+from_context_from_str!(i32);
+from_context_from_str!(i64);
+from_context_from_str!(i128);
+from_context_from_str!(isize);
+from_context_from_str!(u8);
+from_context_from_str!(u16);
+from_context_from_str!(u32);
+from_context_from_str!(u64);
+from_context_from_str!(u128);
+from_context_from_str!(usize);
 
 #[cfg(feature = "with-http-body")]
 // TODO: the duplication between from_bytes() and from_body() is ugly, but I'm not sure how
