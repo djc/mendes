@@ -6,19 +6,30 @@ pub use mendes_macros::{form, ToField};
 #[cfg(feature = "uploads")]
 pub use crate::multipart::{from_form_data, File};
 
+/// A data type that knows how to generate an HTML form for itself
+///
+/// Implementations are usually generated using the `form` procedural macro attribute.
 pub trait ToForm {
     fn to_form() -> Form;
 }
 
+/// An HTML form
 pub struct Form {
+    /// The form action (a relative URL to send the form to)
     pub action: Option<Cow<'static, str>>,
+    /// The form data encoding type
     pub enctype: Option<Cow<'static, str>>,
+    /// The method to use on form submission
     pub method: Option<Cow<'static, str>>,
+    /// List of classes to set on the form element
     pub classes: Vec<Cow<'static, str>>,
+    /// The field sets contained in this form
     pub sets: Vec<FieldSet>,
 }
 
 impl Form {
+    // This should only be used by procedural macros.
+    #[doc(hidden)]
     pub fn prepare(mut self) -> Self {
         let multipart = self
             .sets
