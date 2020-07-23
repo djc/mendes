@@ -17,6 +17,15 @@ use http_body::Body as HttpBody;
 
 pub use mendes_macros::{dispatch, get, handler, post};
 
+/// Main interface for an application or service
+///
+/// The `Application` holds state and routes request to the proper handlers. A handler gets
+/// an immutable reference to the `Application` to access application state. Common usage
+/// for this would be to hold a persistent storage connection pool.
+///
+/// The `Application` also helps process handler reponses. It can handle errors and turn them
+/// into HTTP responses, using the `error()` method to transform the `Error` associated type
+/// into a `Response`.
 #[async_trait]
 pub trait Application: Sized {
     type RequestBody;
@@ -88,13 +97,29 @@ impl<A: Application> Responder<A> for Response<A::ResponseBody> {
     }
 }
 
+/// Maintains state during the routing of requests to the selected handler
+///
+/// The `Context` is created by the `Server` (or similar code) from a `Request` and
+/// reference-counted `Application` instance. It is used to yield parts of the request
+/// to a handler or routing context through implementations of the `FromContext` trait.
+/// To this end, it immediately decouples the request's headers from its body, because
+/// the former are kept alive throughout the request while the body may be ignored
+/// for HEAD/GET requests or will be asynchronously consumed by the handler if necessary.
+///
+/// Once the request reaches a destination handler, it will typically be destructed into
+/// its (remaining) constituent parts for further use by the handler's code. (This is usually
+/// taken care of by one of the handler family of procedural macros, like `get`.)
 pub struct Context<A>
 where
     A: Application,
 {
+    #[doc(hidden)]
     pub app: Arc<A>,
+    #[doc(hidden)]
     pub req: http::request::Parts,
+    #[doc(hidden)]
     pub body: Option<A::RequestBody>,
+    #[doc(hidden)]
     pub path: PathState,
 }
 
@@ -102,6 +127,8 @@ impl<A> Context<A>
 where
     A: Application,
 {
+    // This should only be used by procedural routing macros.
+    #[doc(hidden)]
     pub fn new(app: Arc<A>, req: Request<A::RequestBody>) -> Context<A> {
         let path = PathState::new(req.uri().path());
         let (req, body) = req.into_parts();
@@ -113,42 +140,56 @@ where
         }
     }
 
+    // This should only be used by procedural routing macros.
     #[doc(hidden)]
     pub fn next_path(&mut self) -> Option<&str> {
         self.path.next(&self.req.uri.path())
     }
 
+    // This should only be used by procedural routing macros.
     #[doc(hidden)]
     pub fn rest(&mut self) -> &str {
         self.path.rest(&self.req.uri.path())
     }
 
+    // This should only be used by procedural routing macros.
     #[doc(hidden)]
     pub fn rewind(mut self) -> Self {
         self.path.rewind();
         self
     }
 
+    // This should only be used by procedural routing macros.
+    #[doc(hidden)]
     pub fn take_body(&mut self) -> Option<A::RequestBody> {
         self.body.take()
     }
 
+    // This should only be used by procedural routing macros.
+    #[doc(hidden)]
     pub fn app(&self) -> &Arc<A> {
         &self.app
     }
 
+    // This should only be used by procedural routing macros.
+    #[doc(hidden)]
     pub fn method(&self) -> &http::Method {
         &self.req.method
     }
 
+    // This should only be used by procedural routing macros.
+    #[doc(hidden)]
     pub fn uri(&self) -> &http::uri::Uri {
         &self.req.uri
     }
 
+    // This should only be used by procedural routing macros.
+    #[doc(hidden)]
     pub fn headers(&self) -> &http::HeaderMap {
         &self.req.headers
     }
 
+    // This should only be used by procedural routing macros.
     #[doc(hidden)]
     pub fn query<'de, T: serde::de::Deserialize<'de>>(&'de self) -> Result<T, ClientError> {
         let query = self.req.uri.query().ok_or(ClientError::BadRequest)?;
@@ -354,6 +395,7 @@ where
     Ok(vec.into())
 }
 
+// This should only be used by procedural routing macros.
 #[doc(hidden)]
 pub struct PathState {
     prev: Option<usize>,
@@ -372,6 +414,8 @@ impl PathState {
         Self { prev: None, next }
     }
 
+    // This should only be used by procedural routing macros.
+    #[doc(hidden)]
     pub fn next<'r>(&mut self, path: &'r str) -> Option<&'r str> {
         let start = match self.next.as_ref() {
             Some(v) => *v,
@@ -396,6 +440,8 @@ impl PathState {
         }
     }
 
+    // This should only be used by procedural routing macros.
+    #[doc(hidden)]
     pub fn rest<'r>(&mut self, path: &'r str) -> &'r str {
         let start = match self.next.take() {
             Some(v) => v,
@@ -406,6 +452,8 @@ impl PathState {
         &path[start..]
     }
 
+    // This should only be used by procedural routing macros.
+    #[doc(hidden)]
     pub fn rewind(&mut self) {
         self.next = self.prev.take();
     }
@@ -489,6 +537,7 @@ impl fmt::Display for ClientError {
     }
 }
 
+/// Extension trait for serving an `Application` on the given `SocketAddr`
 #[async_trait]
 pub trait Server: Application {
     type ServerError;
