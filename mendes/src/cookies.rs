@@ -13,9 +13,10 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 // This should only be used by the `cookie` procedural macro.
 #[doc(hidden)]
-pub fn extract<T: CookieData>(name: &str, key: &Key, headers: &HeaderMap) -> Option<T> {
+pub fn extract<T: CookieData>(key: &Key, headers: &HeaderMap) -> Option<T> {
     let cookies = headers.get("cookie")?;
     let cookies = str::from_utf8(cookies.as_ref()).ok()?;
+    let name = T::NAME;
     for cookie in cookies.split(';') {
         let cookie = cookie.trim_start();
         if cookie.len() < (name.len() + 1 + NONCE_LEN + TAG_LEN) {
@@ -66,7 +67,7 @@ pub fn extract<T: CookieData>(name: &str, key: &Key, headers: &HeaderMap) -> Opt
 
 // This should only be used by the `cookie` procedural macro.
 #[doc(hidden)]
-pub fn store<T: CookieData>(name: &str, key: &Key, data: T) -> Result<HeaderValue, ()> {
+pub fn store<T: CookieData>(key: &Key, data: T) -> Result<HeaderValue, ()> {
     let expiration = T::expires().unwrap_or_else(|| Duration::new(NO_EXPIRY, 0));
     let expires = SystemTime::now().checked_add(expiration).ok_or(())?;
     let cookie = Cookie { expires, data };
@@ -80,14 +81,14 @@ pub fn store<T: CookieData>(name: &str, key: &Key, data: T) -> Result<HeaderValu
     rand::SystemRandom::new().fill(nonce).map_err(|_| ())?;
     let nonce = aead::Nonce::try_assume_unique_for_key(nonce).map_err(|_| ())?;
 
-    let ad = aead::Aad::from(name.as_bytes());
+    let ad = aead::Aad::from(T::NAME.as_bytes());
     let ad_tag = key
         .0
         .seal_in_place_separate_tag(nonce, ad, plain)
         .map_err(|_| ())?;
     tag.copy_from_slice(ad_tag.as_ref());
 
-    let mut s = format!("{}={}; Path=/", name, BASE64URL_NOPAD.encode(&data));
+    let mut s = format!("{}={}; Path=/", T::NAME, BASE64URL_NOPAD.encode(&data));
     if let Some(duration) = T::expires() {
         let expires = chrono::Utc::now() + chrono::Duration::from_std(duration).map_err(|_| ())?;
         write!(
@@ -114,6 +115,9 @@ pub fn tombstone(name: &str) -> Result<HeaderValue, ()> {
 ///
 /// This is usually derived through the `cookie` procedural attribute macro.
 pub trait CookieData: DeserializeOwned + Serialize {
+    /// The name to use for the cookie
+    const NAME: &'static str;
+
     /// The expiry time for the cookie
     ///
     /// The `cookie` macro sets this to 6 hours.
