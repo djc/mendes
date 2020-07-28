@@ -8,6 +8,9 @@ pub use application::{
     dispatch, get, handler, post, Application, ClientError, Context, FromContext,
 };
 
+#[cfg(feature = "askama")]
+pub mod askama;
+
 #[cfg(feature = "cookies")]
 pub mod cookies;
 

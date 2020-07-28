@@ -85,10 +85,13 @@ impl<A: Application> Responder<A> for Response<A::ResponseBody> {
     }
 }
 
-impl<A: Application> Responder<A> for Result<Response<A::ResponseBody>, A::Error> {
+impl<A: Application, T> Responder<A> for Result<T, A::Error>
+where
+    T: Responder<A>,
+{
     fn into_response(self, app: &A) -> Response<A::ResponseBody> {
         match self {
-            Ok(rsp) => rsp,
+            Ok(rsp) => rsp.into_response(app),
             Err(e) => e.into_response(app),
         }
     }
