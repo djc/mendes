@@ -20,9 +20,19 @@ mod application {
     use crate::application::Application;
     use http::header::SET_COOKIE;
 
+    /// Cookie manipulation methods, contingent upon the `Application`'s access to an AEAD `Key`
     pub trait AppWithCookies: AppWithAeadKey {
+        /// Extract cookie from the given `HeaderMap` using this `Application`'s `Key`
+        ///
+        /// Finds the first `Cookie` header whose name matches the given type `T` and
+        /// whose value can be successfully decoded, decrypted and has not expired.
         fn cookie<T: CookieData>(&self, headers: &HeaderMap) -> Option<T>;
 
+        /// Set cookie value by appending a `Set-Cookie` to the given `HeaderMap`
+        ///
+        /// If `data` is `Some`, a new value will be set. If the value is `None`, an
+        /// empty value is set with an expiry time in the past, causing the cookie
+        /// to be deleted in compliant clients.
         fn set_cookie<T: CookieData>(
             &self,
             headers: &mut HeaderMap,
@@ -32,6 +42,11 @@ mod application {
             Ok(())
         }
 
+        /// Encode and encrypt the cookie's value into a `Set-Cookie` `HeaderValue`
+        ///
+        /// If `data` is `Some`, a new value will be set. If the value is `None`, an
+        /// empty value is set with an expiry time in the past, causing the cookie
+        /// to be deleted in compliant clients.
         fn set_cookie_header<T: CookieData>(&self, data: Option<T>) -> Result<HeaderValue, ()>;
     }
 
@@ -51,6 +66,11 @@ mod application {
         }
     }
 
+    /// Give mendes-based APIs access to an AEAD key for the `Application`
+    ///
+    /// AEAD (Authenticated Encryption with Associated Data) encrypts data and authenticates
+    /// it such that other parties cannot read or manipulate the encrypted data. Currently
+    /// mendes uses this only to encrypt and authenticate cookie data.
     pub trait AppWithAeadKey: Application {
         fn key(&self) -> &Key;
     }
