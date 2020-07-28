@@ -30,7 +30,11 @@ pub use mendes_macros::{get, handler, post, route};
 pub trait Application: Sized {
     type RequestBody;
     type ResponseBody;
-    type Error: From<ClientError> + Responder<Self>;
+    type Error: From<ClientError> + Responder<Self> + Send;
+
+    async fn prepare(&self, _: &mut Parts) -> Result<(), Self::Error> {
+        Ok(())
+    }
 
     async fn handle(cx: Context<Self>) -> Response<Self::ResponseBody>;
 
