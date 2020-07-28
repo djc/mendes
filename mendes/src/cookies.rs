@@ -11,6 +11,51 @@ use ring::rand::SecureRandom;
 use ring::{aead, rand};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
+#[cfg(feature = "application")]
+pub use application::{AppWithAeadKey, AppWithCookies};
+
+#[cfg(feature = "application")]
+mod application {
+    use super::*;
+    use crate::application::Application;
+    use http::header::SET_COOKIE;
+
+    pub trait AppWithCookies: AppWithAeadKey {
+        fn cookie<T: CookieData>(&self, headers: &HeaderMap) -> Option<T>;
+
+        fn set_cookie<T: CookieData>(
+            &self,
+            headers: &mut HeaderMap,
+            data: Option<T>,
+        ) -> Result<(), ()> {
+            headers.append(SET_COOKIE, self.set_cookie_header(data)?);
+            Ok(())
+        }
+
+        fn set_cookie_header<T: CookieData>(&self, data: Option<T>) -> Result<HeaderValue, ()>;
+    }
+
+    impl<A> AppWithCookies for A
+    where
+        A: AppWithAeadKey,
+    {
+        fn cookie<T: CookieData>(&self, headers: &HeaderMap) -> Option<T> {
+            extract(self.key(), headers)
+        }
+
+        fn set_cookie_header<T: CookieData>(&self, data: Option<T>) -> Result<HeaderValue, ()> {
+            match data {
+                Some(data) => store(self.key(), data),
+                None => tombstone(T::NAME),
+            }
+        }
+    }
+
+    pub trait AppWithAeadKey: Application {
+        fn key(&self) -> &Key;
+    }
+}
+
 /// Data to be stored in a cookie
 ///
 /// This is usually derived through the `cookie` procedural attribute macro.
@@ -22,15 +67,6 @@ pub trait CookieData: DeserializeOwned + Serialize {
     ///
     /// The `cookie` macro sets this to 6 hours.
     fn expires() -> Option<Duration>;
-
-    /// Read the cookie from the request headers
-    fn from_header(key: &Key, headers: &HeaderMap) -> Option<Self>;
-
-    /// Encode and encrypt the cookie into a `String`, to be used in a `Response` header
-    fn to_string(self, key: &Key) -> Result<HeaderValue, ()>;
-
-    /// Return an empty cookie such that the user agent will delete an existing cookie
-    fn tombstone() -> Result<http::HeaderValue, ()>;
 }
 
 #[derive(Deserialize, Serialize)]
@@ -65,9 +101,7 @@ impl Key {
     }
 }
 
-// This should only be used by the `cookie` procedural macro.
-#[doc(hidden)]
-pub fn extract<T: CookieData>(key: &Key, headers: &HeaderMap) -> Option<T> {
+fn extract<T: CookieData>(key: &Key, headers: &HeaderMap) -> Option<T> {
     let cookies = headers.get("cookie")?;
     let cookies = str::from_utf8(cookies.as_ref()).ok()?;
     let name = T::NAME;
@@ -119,9 +153,7 @@ pub fn extract<T: CookieData>(key: &Key, headers: &HeaderMap) -> Option<T> {
     None
 }
 
-// This should only be used by the `cookie` procedural macro.
-#[doc(hidden)]
-pub fn store<T: CookieData>(key: &Key, data: T) -> Result<HeaderValue, ()> {
+fn store<T: CookieData>(key: &Key, data: T) -> Result<HeaderValue, ()> {
     let expiration = T::expires().unwrap_or_else(|| Duration::new(NO_EXPIRY, 0));
     let expires = SystemTime::now().checked_add(expiration).ok_or(())?;
     let cookie = Cookie { expires, data };
@@ -155,9 +187,7 @@ pub fn store<T: CookieData>(key: &Key, data: T) -> Result<HeaderValue, ()> {
     HeaderValue::try_from(s).map_err(|_| ())
 }
 
-// This should only be used by the `cookie` procedural macro.
-#[doc(hidden)]
-pub fn tombstone(name: &str) -> Result<HeaderValue, ()> {
+fn tombstone(name: &str) -> Result<HeaderValue, ()> {
     HeaderValue::try_from(format!(
         "{}=None; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT",
         name

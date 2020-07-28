@@ -4,7 +4,7 @@ use std::convert::TryInto;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use mendes::cookies::{cookie, CookieData};
+use mendes::cookies::{cookie, AppWithAeadKey, AppWithCookies, Key};
 use mendes::http::header::{COOKIE, SET_COOKIE};
 use mendes::http::{Request, Response, StatusCode};
 use mendes::{dispatch, get, Application, ClientError, Context};
@@ -22,10 +22,10 @@ async fn cookie() {
     let rsp = handle(app.clone(), path_request("/store")).await;
     assert_eq!(rsp.status(), StatusCode::OK);
     let set = rsp.headers().get(SET_COOKIE).unwrap();
-    assert!(set.to_str().unwrap().starts_with("Session="));
+    let value = set.to_str().unwrap().split(';').next().unwrap();
 
     let mut req = path_request("/extract");
-    req.headers_mut().insert(COOKIE, set.try_into().unwrap());
+    req.headers_mut().insert(COOKIE, value.try_into().unwrap());
     let rsp = handle(app.clone(), req).await;
     assert_eq!(rsp.status(), StatusCode::OK);
     assert_eq!(rsp.into_body(), "user = 37");
@@ -45,6 +45,12 @@ async fn handle(app: Arc<App>, req: Request<()>) -> Response<String> {
 
 struct App {
     key: mendes::cookies::Key,
+}
+
+impl AppWithAeadKey for App {
+    fn key(&self) -> &Key {
+        &self.key
+    }
 }
 
 #[async_trait]
@@ -72,7 +78,7 @@ impl Application for App {
 
 #[get]
 async fn extract(app: &App, req: &http::request::Parts) -> Result<Response<String>, Error> {
-    let session = Session::from_header(&app.key, &req.headers).unwrap();
+    let session = app.cookie::<Session>(&req.headers).unwrap();
     Ok(Response::builder()
         .status(StatusCode::OK)
         .body(format!("user = {}", session.user))
@@ -84,7 +90,7 @@ async fn store(app: &App) -> Result<Response<String>, Error> {
     let session = Session { user: 37 };
     Ok(Response::builder()
         .status(StatusCode::OK)
-        .header(SET_COOKIE, session.to_string(&app.key).unwrap())
+        .header(SET_COOKIE, app.set_cookie_header(Some(session)).unwrap())
         .body("Hello, world".into())
         .unwrap())
 }
