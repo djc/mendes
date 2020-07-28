@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use mendes::application::Responder;
 use mendes::http::{Method, Request, Response, StatusCode};
 use mendes::{dispatch, get, handler, Application, ClientError, Context};
 
@@ -122,14 +123,6 @@ impl Application for App {
             }
         }
     }
-
-    fn error(&self, err: Error) -> Response<Self::ResponseBody> {
-        let Error::Client(err) = err;
-        Response::builder()
-            .status(StatusCode::from(err))
-            .body(err.to_string())
-            .unwrap()
-    }
 }
 
 #[get]
@@ -180,5 +173,15 @@ enum Error {
 impl From<ClientError> for Error {
     fn from(e: ClientError) -> Self {
         Error::Client(e)
+    }
+}
+
+impl Responder<App> for Error {
+    fn into_response(self, _: &App) -> Response<String> {
+        let Error::Client(err) = self;
+        Response::builder()
+            .status(StatusCode::from(err))
+            .body(err.to_string())
+            .unwrap()
     }
 }
