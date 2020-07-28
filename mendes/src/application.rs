@@ -55,11 +55,10 @@ pub trait Application: Sized {
     }
 
     #[cfg(feature = "with-http-body")]
-    async fn body_bytes(body: Self::RequestBody) -> Result<Bytes, Self::Error>
+    async fn body_bytes<B>(body: B) -> Result<Bytes, B::Error>
     where
-        Self::RequestBody: HttpBody + Send,
-        <Self::RequestBody as HttpBody>::Data: Send,
-        Self::Error: From<<Self::RequestBody as HttpBody>::Error>,
+        B: HttpBody + Send,
+        <B as HttpBody>::Data: Send,
     {
         Ok(to_bytes(body).await?)
     }
