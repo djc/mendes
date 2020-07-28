@@ -3,13 +3,12 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use futures_util::future::FutureExt;
 use http::request::Parts;
 use hyper::server::conn::AddrStream;
 use hyper::service::{make_service_fn, service_fn};
 
 use super::{Application, Context};
-use crate::application::{FromContext, PathState, Server};
+use crate::application::{FromContext, PathState, Responder, Server};
 
 pub use hyper::Body;
 
@@ -28,9 +27,15 @@ where
                 let app = app.clone();
                 async move {
                     Ok::<_, Infallible>(service_fn(move |mut req| {
-                        req.extensions_mut().insert(ClientAddr(addr));
-                        let cx = Context::new(app.clone(), req);
-                        A::handle(cx).map(Ok::<_, Infallible>)
+                        let app = app.clone();
+                        async move {
+                            req.extensions_mut().insert(ClientAddr(addr));
+                            let mut cx = Context::new(app, req);
+                            Ok::<_, Infallible>(match cx.app.prepare(&mut cx.req).await {
+                                Ok(()) => A::handle(cx).await,
+                                Err(e) => e.into_response(&cx.app),
+                            })
+                        }
                     }))
                 }
             }))
