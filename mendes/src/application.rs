@@ -30,11 +30,9 @@ pub use mendes_macros::{dispatch, get, handler, post};
 pub trait Application: Sized {
     type RequestBody;
     type ResponseBody;
-    type Error: From<ClientError>;
+    type Error: From<ClientError> + Responder<Self>;
 
     async fn handle(cx: Context<Self>) -> Response<Self::ResponseBody>;
-
-    fn error(&self, error: Self::Error) -> Response<Self::ResponseBody>;
 
     fn from_body_bytes<'de, T: serde::de::Deserialize<'de>>(
         req: &Parts,
@@ -82,18 +80,24 @@ pub trait Responder<A: Application> {
     fn into_response(self, app: &A) -> Response<A::ResponseBody>;
 }
 
+impl<A: Application> Responder<A> for Response<A::ResponseBody> {
+    fn into_response(self, _: &A) -> Response<A::ResponseBody> {
+        self
+    }
+}
+
 impl<A: Application> Responder<A> for Result<Response<A::ResponseBody>, A::Error> {
     fn into_response(self, app: &A) -> Response<A::ResponseBody> {
         match self {
             Ok(rsp) => rsp,
-            Err(e) => app.error(e),
+            Err(e) => e.into_response(app),
         }
     }
 }
 
-impl<A: Application> Responder<A> for Response<A::ResponseBody> {
-    fn into_response(self, _: &A) -> Response<A::ResponseBody> {
-        self
+impl<A: Application> Responder<A> for ClientError {
+    fn into_response(self, app: &A) -> Response<A::ResponseBody> {
+        A::Error::from(self).into_response(app)
     }
 }
 
@@ -194,6 +198,11 @@ where
     pub fn query<'de, T: serde::de::Deserialize<'de>>(&'de self) -> Result<T, ClientError> {
         let query = self.req.uri.query().ok_or(ClientError::BadRequest)?;
         serde_urlencoded::from_bytes::<T>(query.as_bytes()).map_err(|_| ClientError::BadRequest)
+    }
+
+    #[doc(hidden)]
+    pub fn error(&self, e: ClientError) -> Response<A::ResponseBody> {
+        e.into_response(&*self.app)
     }
 }
 

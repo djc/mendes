@@ -4,6 +4,7 @@ use std::convert::TryInto;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use mendes::application::Responder;
 use mendes::cookies::{cookie, AppWithAeadKey, AppWithCookies, Key};
 use mendes::http::header::{COOKIE, SET_COOKIE};
 use mendes::http::{Request, Response, StatusCode};
@@ -66,14 +67,6 @@ impl Application for App {
             Some("extract") => extract,
         }
     }
-
-    fn error(&self, err: Error) -> Response<Self::ResponseBody> {
-        let Error::Client(err) = err;
-        Response::builder()
-            .status(StatusCode::from(err))
-            .body(err.to_string())
-            .unwrap()
-    }
 }
 
 #[get]
@@ -109,5 +102,15 @@ enum Error {
 impl From<ClientError> for Error {
     fn from(e: ClientError) -> Self {
         Error::Client(e)
+    }
+}
+
+impl Responder<App> for Error {
+    fn into_response(self, _: &App) -> Response<String> {
+        let Error::Client(err) = self;
+        Response::builder()
+            .status(StatusCode::from(err))
+            .body(err.to_string())
+            .unwrap()
     }
 }

@@ -1,8 +1,9 @@
 #![cfg(feature = "application")]
 
 use async_trait::async_trait;
-use http::{Response, StatusCode};
 use hyper::Body;
+use mendes::application::Responder;
+use mendes::http::{Response, StatusCode};
 use mendes::{dispatch, get, Application, ClientError, Context};
 
 #[get]
@@ -27,13 +28,6 @@ impl Application for App {
             _ => hello,
         }
     }
-
-    fn error(&self, _: Error) -> Response<Body> {
-        Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body("ERROR".into())
-            .unwrap()
-    }
 }
 
 #[derive(Debug)]
@@ -44,5 +38,15 @@ enum Error {
 impl From<ClientError> for Error {
     fn from(e: ClientError) -> Error {
         Error::Client(e)
+    }
+}
+
+impl Responder<App> for Error {
+    fn into_response(self, _: &App) -> Response<Body> {
+        let Error::Client(err) = self;
+        Response::builder()
+            .status(StatusCode::from(err))
+            .body(err.to_string().into())
+            .unwrap()
     }
 }
