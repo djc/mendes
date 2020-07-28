@@ -13,7 +13,7 @@ workspace = ".."
 readme = "../README.md"
 
 [features]
-application = ["http", "mendes-macros", "serde_urlencoded"]
+application = ["async-trait", "http", "mendes-macros", "serde", "serde_urlencoded"]
 cookies = ["chrono", "http", "bincode", "data-encoding", "mendes-macros", "ring", "serde/derive"]
 forms = ["mendes-macros", "serde_urlencoded", "serde/derive"]
 json = ["serde_json"]
@@ -21,13 +21,13 @@ models = ["mendes-macros", "serde/derive"]
 uploads = ["http", "httparse", "twoway"]
 with-askama = ["application", "askama", "mime_guess"]
 with-http-body = ["http-body", "bytes", "futures-util"]
-with-hyper = ["application", "bytes", "futures-util", "hyper"]
+with-hyper = ["application", "async-trait", "bytes", "futures-util", "hyper"]
 postgres = ["bytes", "tokio-postgres", "postgres-types", "postgres-types/derive", "chrono", "postgres-types/with-chrono-0_4"]
 static = ["application", "tokio/fs", "mime_guess", "http"]
 
 [dependencies]
 askama = { version = "0.10.3", optional = true, features = ["with-mendes"] }
-async-trait = "0.1.24"
+async-trait = { version = "0.1.24", optional = true }
 bincode = { version = "1.3.1", optional = true }
 bytes = { version = "0.5.4", optional = true }
 chrono = { version = "0.4.10", optional = true, features = ["serde"] }
@@ -41,7 +41,7 @@ mendes-macros = { version = "0.0.23", path = "../mendes-macros", optional = true
 mime_guess = { version = "2.0.3", default-features = false, optional = true }
 postgres-types = { version = "0.1.1", optional = true }
 ring = { version = "0.16.11", optional = true }
-serde = "1.0.104"
+serde = { version = "1.0.104", optional = true }
 serde_json = { version = "1.0.48", optional = true }
 serde_urlencoded = { version = "0.6.1", optional = true }
 tokio = { version = "0.2.11", optional = true }
