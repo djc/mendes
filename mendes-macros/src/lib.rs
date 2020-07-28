@@ -55,9 +55,9 @@ pub fn post(_: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn dispatch(_: TokenStream, item: TokenStream) -> TokenStream {
+pub fn route(_: TokenStream, item: TokenStream) -> TokenStream {
     let mut ast: syn::ItemFn = syn::parse::<syn::ItemFn>(item).unwrap();
-    route::dispatch(&mut ast);
+    route::route(&mut ast);
     TokenStream::from(ast.to_token_stream())
 }
 

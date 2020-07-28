@@ -5,7 +5,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use mendes::application::Responder;
 use mendes::http::{Method, Request, Response, StatusCode};
-use mendes::{dispatch, get, handler, Application, ClientError, Context};
+use mendes::{get, handler, route, Application, ClientError, Context};
 
 #[tokio::test]
 async fn test_method_get() {
@@ -107,7 +107,7 @@ impl Application for App {
     type ResponseBody = String;
     type Error = Error;
 
-    #[dispatch]
+    #[route]
     async fn handle(mut cx: Context<Self>) -> Response<Self::ResponseBody> {
         path! {
             Some("hello") => hello,

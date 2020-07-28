@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use hyper::Body;
 use mendes::application::Responder;
 use mendes::http::{Response, StatusCode};
-use mendes::{dispatch, get, Application, ClientError, Context};
+use mendes::{get, route, Application, ClientError, Context};
 
 #[get]
 async fn hello(_: &App) -> Result<Response<Body>, Error> {
@@ -22,7 +22,7 @@ impl Application for App {
     type ResponseBody = Body;
     type Error = Error;
 
-    #[dispatch]
+    #[route]
     async fn handle(mut cx: Context<Self>) -> Response<Body> {
         path! {
             _ => hello,

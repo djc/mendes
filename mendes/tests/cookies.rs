@@ -8,7 +8,7 @@ use mendes::application::Responder;
 use mendes::cookies::{cookie, AppWithAeadKey, AppWithCookies, Key};
 use mendes::http::header::{COOKIE, SET_COOKIE};
 use mendes::http::{Request, Response, StatusCode};
-use mendes::{dispatch, get, Application, ClientError, Context};
+use mendes::{get, route, Application, ClientError, Context};
 use serde::{Deserialize, Serialize};
 
 #[tokio::test]
@@ -60,7 +60,7 @@ impl Application for App {
     type ResponseBody = String;
     type Error = Error;
 
-    #[dispatch]
+    #[route]
     async fn handle(mut cx: Context<Self>) -> Response<Self::ResponseBody> {
         path! {
             Some("store") => store,

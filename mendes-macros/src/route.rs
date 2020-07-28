@@ -160,7 +160,7 @@ impl Parse for Statement {
     }
 }
 
-pub fn dispatch(ast: &mut syn::ItemFn) {
+pub fn route(ast: &mut syn::ItemFn) {
     let (block, routes) = match ast.block.stmts.get_mut(0) {
         Some(syn::Stmt::Item(syn::Item::Macro(expr))) => {
             let target = Target::from_item(expr);
