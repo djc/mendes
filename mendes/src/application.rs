@@ -15,7 +15,7 @@ use http::{Response, StatusCode};
 #[cfg(feature = "with-http-body")]
 use http_body::Body as HttpBody;
 
-pub use mendes_macros::{dispatch, get, handler, post};
+pub use mendes_macros::{get, handler, post, route};
 
 /// Main interface for an application or service
 ///
