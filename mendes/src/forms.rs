@@ -422,12 +422,16 @@ impl fmt::Display for SelectOption {
 }
 
 pub struct Submit {
-    pub value: Cow<'static, str>,
+    pub value: Option<Cow<'static, str>>,
 }
 
 impl fmt::Display for Submit {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(fmt, r#"<input type="submit" value="{}">"#, self.value)
+        write!(fmt, r#"<input type="submit""#)?;
+        if let Some(s) = &self.value {
+            write!(fmt, r#" value="{}""#, s)?;
+        }
+        write!(fmt, ">")
     }
 }
 

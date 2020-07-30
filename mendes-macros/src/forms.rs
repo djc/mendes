@@ -108,13 +108,18 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
         classes,
         submit,
     } = &meta;
-    let submit = syn::LitStr::new(submit, Span::call_site());
+
+    let submit = match submit {
+        Some(s) => quote!(Some(#s.into())),
+        None => quote!(None),
+    };
+
     new.extend(quote!(
         mendes::forms::Item {
             label: None,
             contents: mendes::forms::ItemContents::Single(
                 mendes::forms::Field::Submit(mendes::forms::Submit {
-                    value: #submit.into(),
+                    value: #submit,
                 })
             ),
         },
@@ -147,8 +152,8 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
 }
 
 pub struct FormMeta {
-    action: String,
-    submit: String,
+    action: Option<String>,
+    submit: Option<String>,
     classes: proc_macro2::TokenStream,
 }
 
@@ -185,8 +190,8 @@ impl Parse for FormMeta {
         }
 
         Ok(Self {
-            action: action.unwrap(),
-            submit: submit.unwrap(),
+            action,
+            submit,
             classes,
         })
     }
