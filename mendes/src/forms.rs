@@ -526,7 +526,29 @@ impl ToField for u32 {
     }
 }
 
+impl ToField for u64 {
+    fn to_field(name: Cow<'static, str>, params: &[(&str, &str)]) -> Field {
+        for (key, value) in params {
+            if *key == "type" && *value == "hidden" {
+                return Field::Hidden(Hidden::from_params(name, params));
+            }
+        }
+        Field::Number(Number { name, value: None })
+    }
+}
+
 impl ToField for i32 {
+    fn to_field(name: Cow<'static, str>, params: &[(&str, &str)]) -> Field {
+        for (key, value) in params {
+            if *key == "type" && *value == "hidden" {
+                return Field::Hidden(Hidden::from_params(name, params));
+            }
+        }
+        Field::Number(Number { name, value: None })
+    }
+}
+
+impl ToField for i64 {
     fn to_field(name: Cow<'static, str>, params: &[(&str, &str)]) -> Field {
         for (key, value) in params {
             if *key == "type" && *value == "hidden" {
