@@ -108,7 +108,6 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
         classes,
         submit,
     } = &meta;
-
     let submit = match submit {
         Some(s) => quote!(Some(#s.into())),
         None => quote!(None),
@@ -125,13 +124,18 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
         },
     ));
 
+    let action = match action {
+        Some(s) => quote!(Some(#s.into())),
+        None => quote!(None),
+    };
+
     let name = &ast.ident;
     let (impl_generics, type_generics, where_clause) = &ast.generics.split_for_impl();
     let display = quote!(
         impl#impl_generics mendes::forms::ToForm for #name#type_generics #where_clause {
             fn to_form() -> mendes::forms::Form {
                 mendes::forms::Form {
-                    action: Some(#action.into()),
+                    action: #action,
                     enctype: None,
                     method: Some("post".into()),
                     classes: #classes,
