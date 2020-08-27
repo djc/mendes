@@ -6,15 +6,18 @@ mod file_mod {
     use std::path::PathBuf;
     use tokio::fs;
 
-    pub async fn file<B>(path: PathBuf) -> Result<http::Response<B>, ClientError>
+    pub async fn file<B>(mut path: PathBuf) -> Result<http::Response<B>, ClientError>
     where
         B: From<Vec<u8>>,
     {
-        let metadata = fs::metadata(&path)
+        let mut metadata = fs::metadata(&path)
             .await
             .map_err(|_| ClientError::NotFound)?;
         if metadata.is_dir() {
-            return Err(ClientError::Unauthorized);
+            path = path.join("index.html");
+            metadata = fs::metadata(&path)
+                .await
+                .map_err(|_| ClientError::NotFound)?;
         }
 
         let mut builder = http::Response::builder()
