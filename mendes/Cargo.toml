@@ -1,6 +1,6 @@
 [package]
 name = "mendes"
-version = "0.0.40"
+version = "0.0.41"
 authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
 description = "Rust web toolkit for impatient perfectionists"
 documentation = "https://docs.rs/mendes"
@@ -37,7 +37,7 @@ http = { version = "0.2", optional = true }
 http-body = { version = "0.3", optional = true }
 httparse = { version = "1.3.4", optional = true }
 hyper = { version = "0.13.2", optional = true }
-mendes-macros = { version = "0.0.26", path = "../mendes-macros", optional = true }
+mendes-macros = { version = "0.0.27", path = "../mendes-macros", optional = true }
 mime_guess = { version = "2.0.3", default-features = false, optional = true }
 postgres-types = { version = "0.1.1", optional = true }
 ring = { version = "0.16.11", optional = true }
