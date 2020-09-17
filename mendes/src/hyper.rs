@@ -48,6 +48,7 @@ where
     A: Application<RequestBody = Body>,
 {
     fn from_context(
+        _: &'a Arc<A>,
         _: &'a Parts,
         _: &mut PathState,
         body: &mut Option<Body>,

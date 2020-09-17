@@ -12,25 +12,39 @@ pub fn handler<T>(methods: &[T], ast: &mut syn::ItemFn)
 where
     T: Display,
 {
-    let (app_name, app_type) = match ast.sig.inputs.first() {
-        Some(syn::FnArg::Typed(syn::PatType { pat, ty, .. })) => match **ty {
-            syn::Type::Reference(ref reffed) => (pat.clone(), reffed.elem.clone()),
+    let app_type = match ast.sig.inputs.first() {
+        Some(syn::FnArg::Typed(syn::PatType { ty, .. })) => match **ty {
+            syn::Type::Reference(ref reffed) => (*reffed.elem).clone(),
             _ => panic!("handler's first argument must be a reference"),
         },
         _ => panic!("handler argument lists must have &App as their first type"),
     };
+
+    let app_type = match &app_type {
+        syn::Type::Path(syn::TypePath { path, .. }) => Some(path),
+        _ => None,
+    }
+    .and_then(|path| path.segments.first())
+    .and_then(|segment| match &segment.ident {
+        id if id == "Arc" => Some(&segment.arguments),
+        _ => None,
+    })
+    .and_then(|args| match args {
+        syn::PathArguments::AngleBracketed(inner) => Some(inner),
+        _ => None,
+    })
+    .and_then(|args| match args.args.first() {
+        Some(syn::GenericArgument::Type(ty)) => Some(ty.clone()),
+        _ => None,
+    })
+    .unwrap_or(app_type);
 
     let new =
         syn::parse::<MethodArgs>(quote!(mut cx: mendes::application::Context<#app_type>).into())
             .unwrap();
     let old = mem::replace(&mut ast.sig.inputs, new.args);
     let (mut args, mut rest, mut query) = (vec![], None, None);
-    for (i, arg) in old.iter().enumerate() {
-        if i == 0 {
-            // this is the Application argument
-            continue;
-        }
-
+    for arg in old.iter() {
         let typed = match arg {
             syn::FnArg::Typed(typed) => typed,
             _ => panic!("did not expect receiver argument in handler"),
@@ -78,7 +92,7 @@ where
     for (pat, ty) in args {
         block.push(Statement::get(
             quote!(
-                let #pat = <#ty as mendes::FromContext<#app_type>>::from_context(&cx.req, &mut cx.path, &mut cx.body)?;
+                let #pat = <#ty as mendes::FromContext<#app_type>>::from_context(&cx.app, &cx.req, &mut cx.path, &mut cx.body)?;
             )
             .into(),
         ));
@@ -102,7 +116,6 @@ where
         ));
     }
 
-    block.push(Statement::get(quote!(let #app_name = &cx.app;).into()));
     let old = mem::replace(&mut ast.block.stmts, block);
     ast.block.stmts.extend(old);
 }

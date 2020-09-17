@@ -217,6 +217,7 @@ where
     A: Application,
 {
     fn from_context(
+        app: &'a Arc<A>,
         req: &'a Parts,
         state: &mut PathState,
         body: &mut Option<A::RequestBody>,
@@ -227,6 +228,7 @@ macro_rules! from_context_from_str {
     ($self:ty) => {
         impl<'a, A: Application> FromContext<'a, A> for $self {
             fn from_context(
+                _: &'a Arc<A>,
                 req: &'a Parts,
                 state: &mut PathState,
                 _: &mut Option<A::RequestBody>,
@@ -238,6 +240,7 @@ macro_rules! from_context_from_str {
 
         impl<'a, A: Application> FromContext<'a, A> for Option<$self> {
             fn from_context(
+                _: &'a Arc<A>,
                 req: &'a Parts,
                 state: &mut PathState,
                 _: &mut Option<A::RequestBody>,
@@ -254,8 +257,31 @@ macro_rules! from_context_from_str {
     };
 }
 
+impl<'a, A: Application> FromContext<'a, A> for &'a A {
+    fn from_context(
+        app: &'a Arc<A>,
+        _: &'a Parts,
+        _: &mut PathState,
+        _: &mut Option<A::RequestBody>,
+    ) -> Result<Self, A::Error> {
+        Ok(app)
+    }
+}
+
+impl<'a, A: Application> FromContext<'a, A> for &'a Arc<A> {
+    fn from_context(
+        app: &'a Arc<A>,
+        _: &'a Parts,
+        _: &mut PathState,
+        _: &mut Option<A::RequestBody>,
+    ) -> Result<Self, A::Error> {
+        Ok(app)
+    }
+}
+
 impl<'a, A: Application> FromContext<'a, A> for &'a http::request::Parts {
     fn from_context(
+        _: &'a Arc<A>,
         req: &'a Parts,
         _: &mut PathState,
         _: &mut Option<A::RequestBody>,
@@ -266,6 +292,7 @@ impl<'a, A: Application> FromContext<'a, A> for &'a http::request::Parts {
 
 impl<'a, A: Application> FromContext<'a, A> for Option<&'a str> {
     fn from_context(
+        _: &'a Arc<A>,
         req: &'a Parts,
         state: &mut PathState,
         _: &mut Option<A::RequestBody>,
@@ -276,6 +303,7 @@ impl<'a, A: Application> FromContext<'a, A> for Option<&'a str> {
 
 impl<'a, A: Application> FromContext<'a, A> for &'a str {
     fn from_context(
+        _: &'a Arc<A>,
         req: &'a Parts,
         state: &mut PathState,
         _: &mut Option<A::RequestBody>,
