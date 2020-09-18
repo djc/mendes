@@ -34,24 +34,21 @@ pub fn form(meta: TokenStream, item: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn handler(meta: TokenStream, item: TokenStream) -> TokenStream {
-    let mut ast = syn::parse::<syn::ItemFn>(item).unwrap();
+    let ast = syn::parse::<syn::ItemFn>(item).unwrap();
     let methods = syn::parse::<route::HandlerMethods>(meta).unwrap().methods;
-    route::handler(&methods, &mut ast);
-    TokenStream::from(ast.to_token_stream())
+    route::handler(&methods, ast)
 }
 
 #[proc_macro_attribute]
 pub fn get(_: TokenStream, item: TokenStream) -> TokenStream {
-    let mut ast = syn::parse::<syn::ItemFn>(item).unwrap();
-    route::handler(&["get"], &mut ast);
-    TokenStream::from(ast.to_token_stream())
+    let ast = syn::parse::<syn::ItemFn>(item).unwrap();
+    route::handler(&["get"], ast)
 }
 
 #[proc_macro_attribute]
 pub fn post(_: TokenStream, item: TokenStream) -> TokenStream {
-    let mut ast = syn::parse::<syn::ItemFn>(item).unwrap();
-    route::handler(&["post"], &mut ast);
-    TokenStream::from(ast.to_token_stream())
+    let ast = syn::parse::<syn::ItemFn>(item).unwrap();
+    route::handler(&["post"], ast)
 }
 
 #[proc_macro_attribute]

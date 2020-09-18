@@ -1,5 +1,4 @@
 use std::fmt::Display;
-use std::mem;
 
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
@@ -8,7 +7,7 @@ use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
 
-pub fn handler<T>(methods: &[T], ast: &mut syn::ItemFn)
+pub fn handler<T>(methods: &[T], mut ast: syn::ItemFn) -> TokenStream
 where
     T: Display,
 {
@@ -39,35 +38,6 @@ where
     })
     .unwrap_or(app_type);
 
-    let new =
-        syn::parse::<MethodArgs>(quote!(mut cx: mendes::application::Context<#app_type>).into())
-            .unwrap();
-    let old = mem::replace(&mut ast.sig.inputs, new.args);
-    let (mut args, mut rest, mut query) = (vec![], None, None);
-    for arg in old.iter() {
-        let typed = match arg {
-            syn::FnArg::Typed(typed) => typed,
-            _ => panic!("did not expect receiver argument in handler"),
-        };
-
-        let (pat, ty) = (&typed.pat, &typed.ty);
-        if let Some(attr) = typed.attrs.first() {
-            if attr.path.is_ident("rest") {
-                rest = Some(pat);
-                continue;
-            } else if attr.path.is_ident("query") {
-                query = Some((pat, ty));
-                continue;
-            }
-        }
-
-        if rest.is_some() {
-            panic!("more arguments after #[raw] not allowed");
-        }
-
-        args.push((pat, ty));
-    }
-
     let mut method_patterns = proc_macro2::TokenStream::new();
     for (i, method) in methods.iter().enumerate() {
         let method = Ident::new(&method.to_string().to_ascii_uppercase(), Span::call_site());
@@ -78,58 +48,126 @@ where
         });
     }
 
-    let mut block = Vec::with_capacity(ast.block.stmts.len());
-    block.push(Statement::get(
+    let mut done = false;
+    let mut prefix = proc_macro2::TokenStream::new();
+    let mut args = proc_macro2::TokenStream::new();
+    for (i, arg) in ast.sig.inputs.iter_mut().enumerate() {
+        let typed = match arg {
+            syn::FnArg::Typed(typed) => typed,
+            _ => panic!("did not expect receiver argument in handler"),
+        };
+
+        let mut special = false;
+        let (pat, ty) = (&*typed.pat, &typed.ty);
+        typed.attrs.retain(|attr| {
+            if attr.path.is_ident("rest") {
+                prefix.extend(quote!(
+                    let #pat = cx.path.rest(&cx.req.uri.path());
+                ));
+                args.extend(quote!(#pat,));
+                done = true;
+                special = true;
+                false
+            } else if attr.path.is_ident("query") {
+                prefix.extend(quote!(let #pat = cx.query::<#ty>()?;));
+                args.extend(quote!(#pat,));
+                special = true;
+                false
+            } else {
+                true
+            }
+        });
+
+        if special {
+            continue;
+        } else if done {
+            panic!("more arguments after #[rest] not allowed");
+        }
+
+        let name = match pat {
+            syn::Pat::Wild(_) => syn::Pat::Ident(syn::PatIdent {
+                ident: Ident::new(&format!("_{}", i), Span::call_site()),
+                attrs: Vec::new(),
+                mutability: None,
+                subpat: None,
+                by_ref: None,
+            }),
+            _ => pat.clone(),
+        };
+
+        prefix.extend(quote!(
+            let #name = <#ty as mendes::FromContext<#app_type>>::from_context(
+                &cx.app, &cx.req, &mut cx.path, &mut cx.body,
+            )?;
+        ));
+        args.extend(quote!(#name,));
+    }
+
+    let name = ast.sig.ident.clone();
+    let orig_vis = ast.vis.clone();
+    ast.vis = match ast.vis {
+        cur @ syn::Visibility::Crate(_) | cur @ syn::Visibility::Public(_) => cur,
+        syn::Visibility::Inherited => visibility("super"),
+        cur @ syn::Visibility::Restricted(_) => {
+            let inner = match &cur {
+                syn::Visibility::Restricted(inner) => inner,
+                _ => unreachable!(),
+            };
+
+            if inner.path.is_ident("self") {
+                visibility("super")
+            } else if inner.path.is_ident("super") {
+                visibility("super::super")
+            } else {
+                cur
+            }
+        }
+    };
+
+    let handler = {
+        let nested_vis = &ast.vis;
+        let generics = &ast.sig.generics;
+        let rtype = &ast.sig.output;
+        let where_clause = &ast.sig.generics.where_clause;
         quote!(
-            match &cx.req.method {
-                #method_patterns => {}
-                _ => return Err(mendes::application::ClientError::MethodNotAllowed.into()),
+            #nested_vis async fn handler#generics(
+                mut cx: mendes::application::Context<#app_type>
+            ) #rtype #where_clause {
+                match &cx.req.method {
+                    #method_patterns => {}
+                    _ => return Err(mendes::application::ClientError::MethodNotAllowed.into()),
+                }
+                #prefix
+                call(#args).await
             }
         )
-        .into(),
-    ));
+    };
 
-    for (pat, ty) in args {
-        block.push(Statement::get(
-            quote!(
-                let #pat = <#ty as mendes::FromContext<#app_type>>::from_context(&cx.app, &cx.req, &mut cx.path, &mut cx.body)?;
-            )
-            .into(),
-        ));
-    }
+    let call = {
+        ast.sig.ident = Ident::new("call", Span::call_site());
+        quote!(#ast)
+    };
 
-    if let Some(pat) = rest {
-        block.push(Statement::get(
-            quote!(
-                let #pat = cx.path.rest(&cx.req.uri.path());
-            )
-            .into(),
-        ));
-    }
-
-    if let Some((pat, ty)) = query {
-        block.push(Statement::get(
-            quote!(
-                let #pat = cx.query::<#ty>()?;
-            )
-            .into(),
-        ));
-    }
-
-    let old = mem::replace(&mut ast.block.stmts, block);
-    ast.block.stmts.extend(old);
+    quote!(#orig_vis mod #name {
+        use super::*;
+        #handler
+        #call
+    })
+    .into()
 }
 
-struct MethodArgs {
-    args: Punctuated<syn::FnArg, Comma>,
-}
-
-impl Parse for MethodArgs {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        Ok(Self {
-            args: Punctuated::parse_terminated(input)?,
-        })
-    }
+fn visibility(path: &str) -> syn::Visibility {
+    syn::Visibility::Restricted(syn::VisRestricted {
+        pub_token: syn::Token![pub](Span::call_site()),
+        paren_token: syn::token::Paren {
+            span: Span::call_site(),
+        },
+        in_token: match path {
+            "self" | "crate" | "super" => None,
+            _ => Some(syn::Token![in](Span::call_site())),
+        },
+        path: Box::new(Ident::new(path, Span::call_site()).into()),
+    })
 }
 
 pub struct AppType {
@@ -151,24 +189,6 @@ impl Parse for HandlerMethods {
         let methods = Punctuated::<syn::Ident, Comma>::parse_terminated(input)?;
         Ok(Self {
             methods: methods.into_iter().collect(),
-        })
-    }
-}
-
-struct Statement {
-    stmt: syn::Stmt,
-}
-
-impl Statement {
-    fn get(tokens: TokenStream) -> syn::Stmt {
-        syn::parse::<Statement>(tokens).unwrap().stmt
-    }
-}
-
-impl Parse for Statement {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        Ok(Self {
-            stmt: input.parse()?,
         })
     }
 }
@@ -242,7 +262,7 @@ impl quote::ToTokens for Target {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         match self {
             Target::Direct(expr) => quote!(
-                #expr(cx).await.into_response(&*app)
+                #expr::handler(cx).await.into_response(&*app)
             )
             .to_tokens(tokens),
             Target::MethodMap(map) => map.to_tokens(tokens),
