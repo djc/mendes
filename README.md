@@ -26,9 +26,10 @@ This should definitely become more minimal over time.
 
 ```rust
 use async_trait::async_trait;
-use http::{Response, StatusCode};
 use hyper::Body;
-use mendes::{dispatch, get, Application, ClientError, Context};
+use mendes::application::Responder;
+use mendes::http::{Response, StatusCode};
+use mendes::{get, route, Application, ClientError, Context};
 
 #[get]
 async fn hello(_: &App) -> Result<Response<Body>, Error> {
@@ -46,18 +47,11 @@ impl Application for App {
     type ResponseBody = Body;
     type Error = Error;
 
-    #[dispatch]
+    #[route]
     async fn handle(mut cx: Context<Self>) -> Response<Body> {
         path! {
             _ => hello,
         }
-    }
-
-    fn error(&self, _: Error) -> Response<Body> {
-        Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body("ERROR".into())
-            .unwrap()
     }
 }
 
@@ -69,6 +63,16 @@ enum Error {
 impl From<ClientError> for Error {
     fn from(e: ClientError) -> Error {
         Error::Client(e)
+    }
+}
+
+impl Responder<App> for Error {
+    fn into_response(self, _: &App) -> Response<Body> {
+        let Error::Client(err) = self;
+        Response::builder()
+            .status(StatusCode::from(err))
+            .body(err.to_string().into())
+            .unwrap()
     }
 }
 ```
