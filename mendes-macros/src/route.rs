@@ -174,19 +174,6 @@ fn visibility(path: &str) -> syn::Visibility {
     })
 }
 
-pub struct HandlerMethods {
-    pub methods: Vec<syn::Ident>,
-}
-
-impl Parse for HandlerMethods {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let methods = Punctuated::<syn::Ident, Comma>::parse_terminated(input)?;
-        Ok(Self {
-            methods: methods.into_iter().collect(),
-        })
-    }
-}
-
 pub fn route(mut ast: syn::ItemFn, root: bool) -> TokenStream {
     let (block, routes) = match ast.block.stmts.get_mut(0) {
         Some(syn::Stmt::Item(syn::Item::Macro(expr))) => {
@@ -304,6 +291,45 @@ impl Parse for PathMap {
     }
 }
 
+impl quote::ToTokens for PathMap {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let mut route_tokens = proc_macro2::TokenStream::new();
+        let mut wildcard = false;
+        for (attrs, component, target) in self.routes.iter() {
+            let mut rewind = false;
+            if let syn::Pat::Wild(_) = component {
+                wildcard = true;
+                rewind = true;
+            }
+
+            attrs
+                .iter()
+                .for_each(|attr| attr.to_tokens(&mut route_tokens));
+            if rewind {
+                quote!(
+                    #component => {
+                        let mut cx = cx.rewind();
+                        #target
+                    }
+                )
+                .to_tokens(&mut route_tokens);
+            } else {
+                quote!(#component => #target,).to_tokens(&mut route_tokens);
+            }
+        }
+
+        if !wildcard {
+            route_tokens.extend(quote!(
+                _ => cx.error(::mendes::ClientError::NotFound),
+            ));
+        }
+
+        tokens.extend(quote!(match cx.next_path() {
+            #route_tokens
+        }));
+    }
+}
+
 struct MethodMap {
     routes: Vec<(Vec<syn::Attribute>, syn::Ident, Target)>,
 }
@@ -356,41 +382,15 @@ impl quote::ToTokens for MethodMap {
     }
 }
 
-impl quote::ToTokens for PathMap {
-    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        let mut route_tokens = proc_macro2::TokenStream::new();
-        let mut wildcard = false;
-        for (attrs, component, target) in self.routes.iter() {
-            let mut rewind = false;
-            if let syn::Pat::Wild(_) = component {
-                wildcard = true;
-                rewind = true;
-            }
+pub struct HandlerMethods {
+    pub methods: Vec<syn::Ident>,
+}
 
-            attrs
-                .iter()
-                .for_each(|attr| attr.to_tokens(&mut route_tokens));
-            if rewind {
-                quote!(
-                    #component => {
-                        let mut cx = cx.rewind();
-                        #target
-                    }
-                )
-                .to_tokens(&mut route_tokens);
-            } else {
-                quote!(#component => #target,).to_tokens(&mut route_tokens);
-            }
-        }
-
-        if !wildcard {
-            route_tokens.extend(quote!(
-                _ => cx.error(::mendes::ClientError::NotFound),
-            ));
-        }
-
-        tokens.extend(quote!(match cx.next_path() {
-            #route_tokens
-        }));
+impl Parse for HandlerMethods {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let methods = Punctuated::<syn::Ident, Comma>::parse_terminated(input)?;
+        Ok(Self {
+            methods: methods.into_iter().collect(),
+        })
     }
 }
