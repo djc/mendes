@@ -170,16 +170,6 @@ fn visibility(path: &str) -> syn::Visibility {
     })
 }
 
-pub struct AppType {
-    pub ty: syn::Type,
-}
-
-impl Parse for AppType {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        Ok(Self { ty: input.parse()? })
-    }
-}
-
 pub struct HandlerMethods {
     pub methods: Vec<syn::Ident>,
 }
