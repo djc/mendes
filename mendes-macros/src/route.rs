@@ -105,24 +105,7 @@ where
 
     let name = ast.sig.ident.clone();
     let orig_vis = ast.vis.clone();
-    ast.vis = match ast.vis {
-        cur @ syn::Visibility::Crate(_) | cur @ syn::Visibility::Public(_) => cur,
-        syn::Visibility::Inherited => visibility("super"),
-        cur @ syn::Visibility::Restricted(_) => {
-            let inner = match &cur {
-                syn::Visibility::Restricted(inner) => inner,
-                _ => unreachable!(),
-            };
-
-            if inner.path.is_ident("self") {
-                visibility("super")
-            } else if inner.path.is_ident("super") {
-                visibility("super::super")
-            } else {
-                cur
-            }
-        }
-    };
+    ast.vis = nested_visibility(ast.vis);
 
     let handler = {
         let nested_vis = &ast.vis;
@@ -154,6 +137,27 @@ where
         #call
     })
     .into()
+}
+
+fn nested_visibility(vis: syn::Visibility) -> syn::Visibility {
+    match vis {
+        cur @ syn::Visibility::Crate(_) | cur @ syn::Visibility::Public(_) => cur,
+        syn::Visibility::Inherited => visibility("super"),
+        cur @ syn::Visibility::Restricted(_) => {
+            let inner = match &cur {
+                syn::Visibility::Restricted(inner) => inner,
+                _ => unreachable!(),
+            };
+
+            if inner.path.is_ident("self") {
+                visibility("super")
+            } else if inner.path.is_ident("super") {
+                visibility("super::super")
+            } else {
+                cur
+            }
+        }
+    }
 }
 
 fn visibility(path: &str) -> syn::Visibility {
