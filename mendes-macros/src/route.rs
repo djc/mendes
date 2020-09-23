@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
-use quote::quote;
+use quote::{quote, ToTokens};
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
@@ -187,7 +187,7 @@ impl Parse for HandlerMethods {
     }
 }
 
-pub fn route(ast: &mut syn::ItemFn) {
+pub fn route(mut ast: syn::ItemFn, root: bool) -> TokenStream {
     let (block, routes) = match ast.block.stmts.get_mut(0) {
         Some(syn::Stmt::Item(syn::Item::Macro(expr))) => {
             let target = Target::from_item(expr);
@@ -212,6 +212,20 @@ pub fn route(ast: &mut syn::ItemFn) {
     });
 
     *block = Box::new(syn::parse::<syn::Block>(new.into()).unwrap());
+    if root {
+        return ast.to_token_stream().into();
+    }
+
+    let name = ast.sig.ident.clone();
+    let orig_vis = ast.vis.clone();
+    ast.vis = nested_visibility(ast.vis);
+
+    ast.sig.ident = Ident::new("handler", Span::call_site());
+    quote!(#orig_vis mod #name {
+        use super::*;
+        #ast
+    })
+    .into()
 }
 
 #[allow(clippy::large_enum_variant)]

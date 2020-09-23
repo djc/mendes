@@ -53,9 +53,14 @@ pub fn post(_: TokenStream, item: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn route(_: TokenStream, item: TokenStream) -> TokenStream {
-    let mut ast: syn::ItemFn = syn::parse::<syn::ItemFn>(item).unwrap();
-    route::route(&mut ast);
-    TokenStream::from(ast.to_token_stream())
+    let ast: syn::ItemFn = syn::parse::<syn::ItemFn>(item).unwrap();
+    route::route(ast, true)
+}
+
+#[proc_macro_attribute]
+pub fn scope(_: TokenStream, item: TokenStream) -> TokenStream {
+    let ast: syn::ItemFn = syn::parse::<syn::ItemFn>(item).unwrap();
+    route::route(ast, false)
 }
 
 #[proc_macro_derive(ToField, attributes(option))]
