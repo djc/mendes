@@ -262,7 +262,7 @@ impl quote::ToTokens for Target {
 }
 
 struct PathMap {
-    routes: Vec<(syn::Pat, Target)>,
+    routes: Vec<(Vec<syn::Attribute>, syn::Pat, Target)>,
 }
 
 impl Parse for PathMap {
@@ -276,17 +276,18 @@ impl Parse for PathMap {
                 }
             }
 
+            let attrs = input.call(syn::Attribute::parse_outer)?;
             let component = input.parse()?;
             input.parse::<syn::Token![=>]>()?;
             let target = input.parse()?;
-            routes.push((component, target));
+            routes.push((attrs, component, target));
         }
         Ok(PathMap { routes })
     }
 }
 
 struct MethodMap {
-    routes: Vec<(syn::Ident, Target)>,
+    routes: Vec<(Vec<syn::Attribute>, syn::Ident, Target)>,
 }
 
 impl Parse for MethodMap {
@@ -300,10 +301,11 @@ impl Parse for MethodMap {
                 }
             }
 
+            let attrs = input.call(syn::Attribute::parse_outer)?;
             let component = input.parse()?;
             input.parse::<syn::Token![=>]>()?;
             let target = input.parse()?;
-            routes.push((component, target));
+            routes.push((attrs, component, target));
         }
         Ok(MethodMap { routes })
     }
@@ -313,11 +315,14 @@ impl quote::ToTokens for MethodMap {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let mut route_tokens = proc_macro2::TokenStream::new();
         let mut wildcard = false;
-        for (component, target) in self.routes.iter() {
+        for (attrs, component, target) in self.routes.iter() {
             if component == "_" {
                 wildcard = true;
             }
 
+            attrs
+                .iter()
+                .for_each(|attr| attr.to_tokens(&mut route_tokens));
             quote!(mendes::http::Method::#component => #target,).to_tokens(&mut route_tokens);
         }
 
@@ -337,13 +342,16 @@ impl quote::ToTokens for PathMap {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let mut route_tokens = proc_macro2::TokenStream::new();
         let mut wildcard = false;
-        for (component, target) in self.routes.iter() {
+        for (attrs, component, target) in self.routes.iter() {
             let mut rewind = false;
             if let syn::Pat::Wild(_) = component {
                 wildcard = true;
                 rewind = true;
             }
 
+            attrs
+                .iter()
+                .for_each(|attr| attr.to_tokens(&mut route_tokens));
             if rewind {
                 quote!(
                     #component => {
