@@ -324,7 +324,7 @@ impl quote::ToTokens for PathMap {
             ));
         }
 
-        tokens.extend(quote!(match cx.next_path() {
+        tokens.extend(quote!(match cx.next_path().as_deref() {
             #route_tokens
         }));
     }

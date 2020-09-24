@@ -150,7 +150,7 @@ async fn numbered(_: &App, num: usize) -> Result<Response<String>, Error> {
 }
 
 #[handler(get, post)]
-async fn named(_: &App, name: &str) -> Result<Response<String>, Error> {
+async fn named(_: &App, name: String) -> Result<Response<String>, Error> {
     Ok(Response::builder()
         .status(StatusCode::OK)
         .body(format!("Hello, {}", name))

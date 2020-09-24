@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::error::Error as StdError;
 use std::fmt;
 use std::net::SocketAddr;
@@ -14,6 +15,7 @@ use http::Request;
 use http::{Response, StatusCode};
 #[cfg(feature = "with-http-body")]
 use http_body::Body as HttpBody;
+use percent_encoding::percent_decode_str;
 
 pub use mendes_macros::{get, handler, post, route, scope};
 
@@ -152,8 +154,8 @@ where
 
     // This should only be used by procedural routing macros.
     #[doc(hidden)]
-    pub fn next_path(&mut self) -> Option<&str> {
-        self.path.next(&self.req.uri.path())
+    pub fn next_path(&mut self) -> Option<Cow<'_, str>> {
+        path_str(&self.req, &mut self.path).ok().flatten()
     }
 
     // This should only be used by procedural routing macros.
@@ -290,18 +292,18 @@ impl<'a, A: Application> FromContext<'a, A> for &'a http::request::Parts {
     }
 }
 
-impl<'a, A: Application> FromContext<'a, A> for Option<&'a str> {
+impl<'a, A: Application> FromContext<'a, A> for Option<&'a [u8]> {
     fn from_context(
         _: &'a Arc<A>,
         req: &'a Parts,
         state: &mut PathState,
         _: &mut Option<A::RequestBody>,
     ) -> Result<Self, A::Error> {
-        Ok(state.next(&req.uri.path()))
+        Ok(state.next(&req.uri.path()).map(|s| s.as_bytes()))
     }
 }
 
-impl<'a, A: Application> FromContext<'a, A> for &'a str {
+impl<'a, A: Application> FromContext<'a, A> for &'a [u8] {
     fn from_context(
         _: &'a Arc<A>,
         req: &'a Parts,
@@ -311,7 +313,73 @@ impl<'a, A: Application> FromContext<'a, A> for &'a str {
         state
             .next(&req.uri.path())
             .ok_or_else(|| ClientError::NotFound.into())
+            .map(|s| s.as_bytes())
     }
+}
+
+impl<'a, A: Application> FromContext<'a, A> for Option<Cow<'a, str>> {
+    fn from_context(
+        _: &'a Arc<A>,
+        req: &'a Parts,
+        state: &mut PathState,
+        _: &mut Option<A::RequestBody>,
+    ) -> Result<Self, A::Error> {
+        Ok(path_str(req, state)?)
+    }
+}
+
+impl<'a, A: Application> FromContext<'a, A> for Cow<'a, str> {
+    fn from_context(
+        _: &'a Arc<A>,
+        req: &'a Parts,
+        state: &mut PathState,
+        _: &mut Option<A::RequestBody>,
+    ) -> Result<Self, A::Error> {
+        match path_str(req, state)? {
+            Some(s) => Ok(s),
+            None => Err(ClientError::NotFound.into()),
+        }
+    }
+}
+
+impl<'a, A: Application> FromContext<'a, A> for Option<String> {
+    fn from_context(
+        _: &'a Arc<A>,
+        req: &'a Parts,
+        state: &mut PathState,
+        _: &mut Option<A::RequestBody>,
+    ) -> Result<Self, A::Error> {
+        Ok(path_str(req, state)?.map(|s| s.into_owned()))
+    }
+}
+
+impl<'a, A: Application> FromContext<'a, A> for String {
+    fn from_context(
+        _: &'a Arc<A>,
+        req: &'a Parts,
+        state: &mut PathState,
+        _: &mut Option<A::RequestBody>,
+    ) -> Result<Self, A::Error> {
+        match path_str(req, state)? {
+            Some(s) => Ok(s.into_owned()),
+            None => Err(ClientError::NotFound.into()),
+        }
+    }
+}
+
+fn path_str<'a>(
+    req: &'a Parts,
+    state: &mut PathState,
+) -> Result<Option<Cow<'a, str>>, ClientError> {
+    let s = match state.next(&req.uri.path()) {
+        Some(s) => s,
+        None => return Ok(None),
+    };
+
+    percent_decode_str(s)
+        .decode_utf8()
+        .map(|s| Some(s))
+        .map_err(|_| ClientError::NotFound)
 }
 
 from_context_from_str!(bool);
