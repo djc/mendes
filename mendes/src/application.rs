@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::error::Error as StdError;
-use std::fmt;
 use std::net::SocketAddr;
 use std::str;
 use std::str::FromStr;
@@ -16,6 +15,7 @@ use http::{Response, StatusCode};
 #[cfg(feature = "with-http-body")]
 use http_body::Body as HttpBody;
 use percent_encoding::percent_decode_str;
+use thiserror::Error;
 
 pub use mendes_macros::{get, handler, post, route, scope};
 
@@ -32,7 +32,7 @@ pub use mendes_macros::{get, handler, post, route, scope};
 pub trait Application: Sized {
     type RequestBody;
     type ResponseBody;
-    type Error: From<ClientError> + Responder<Self> + Send;
+    type Error: Responder<Self> + WithStatus + From<Error> + Send;
 
     async fn prepare(&self, _: &mut Parts) -> Result<(), Self::Error> {
         Ok(())
@@ -43,7 +43,7 @@ pub trait Application: Sized {
     fn from_body_bytes<'de, T: serde::de::Deserialize<'de>>(
         req: &Parts,
         bytes: &'de [u8],
-    ) -> Result<T, FromBodyError> {
+    ) -> Result<T, Error> {
         from_bytes::<T>(req, bytes)
     }
 
@@ -51,7 +51,7 @@ pub trait Application: Sized {
     async fn from_body<T: serde::de::DeserializeOwned>(
         req: &Parts,
         body: Self::RequestBody,
-    ) -> Result<T, FromBodyError>
+    ) -> Result<T, Error>
     where
         Self::RequestBody: HttpBody + Send,
         <Self::RequestBody as HttpBody>::Data: Send,
@@ -81,6 +81,10 @@ pub trait Application: Sized {
     }
 }
 
+pub trait WithStatus {}
+
+impl<T> WithStatus for T where StatusCode: for<'a> From<&'a T> {}
+
 pub trait Responder<A: Application> {
     fn into_response(self, app: &A) -> Response<A::ResponseBody>;
 }
@@ -103,7 +107,7 @@ where
     }
 }
 
-impl<A: Application> Responder<A> for ClientError {
+impl<A: Application> Responder<A> for Error {
     fn into_response(self, app: &A) -> Response<A::ResponseBody> {
         A::Error::from(self).into_response(app)
     }
@@ -203,13 +207,13 @@ where
 
     // This should only be used by procedural routing macros.
     #[doc(hidden)]
-    pub fn query<'de, T: serde::de::Deserialize<'de>>(&'de self) -> Result<T, ClientError> {
-        let query = self.req.uri.query().ok_or(ClientError::BadRequest)?;
-        serde_urlencoded::from_bytes::<T>(query.as_bytes()).map_err(|_| ClientError::BadRequest)
+    pub fn query<'de, T: serde::de::Deserialize<'de>>(&'de self) -> Result<T, Error> {
+        let query = self.req.uri.query().ok_or(Error::QueryMissing)?;
+        serde_urlencoded::from_bytes::<T>(query.as_bytes()).map_err(Error::QueryDecode)
     }
 
     #[doc(hidden)]
-    pub fn error(&self, e: ClientError) -> Response<A::ResponseBody> {
+    pub fn error(&self, e: Error) -> Response<A::ResponseBody> {
         e.into_response(&*self.app)
     }
 }
@@ -235,8 +239,10 @@ macro_rules! from_context_from_str {
                 state: &mut PathState,
                 _: &mut Option<A::RequestBody>,
             ) -> Result<Self, A::Error> {
-                let s = state.next(&req.uri.path()).ok_or(ClientError::NotFound)?;
-                <$self>::from_str(s).map_err(|_| ClientError::NotFound.into())
+                let s = state
+                    .next(&req.uri.path())
+                    .ok_or(Error::PathComponentMissing.into())?;
+                <$self>::from_str(s).map_err(|_| Error::PathParse.into())
             }
         }
 
@@ -250,7 +256,7 @@ macro_rules! from_context_from_str {
                 match state.next(&req.uri.path()) {
                     Some(s) => match <$self>::from_str(s) {
                         Ok(v) => Ok(Some(v)),
-                        Err(_) => Err(ClientError::NotFound.into()),
+                        Err(_) => Err(Error::PathParse.into()),
                     },
                     None => Ok(None),
                 }
@@ -312,7 +318,7 @@ impl<'a, A: Application> FromContext<'a, A> for &'a [u8] {
     ) -> Result<Self, A::Error> {
         state
             .next(&req.uri.path())
-            .ok_or_else(|| ClientError::NotFound.into())
+            .ok_or_else(|| Error::PathComponentMissing.into())
             .map(|s| s.as_bytes())
     }
 }
@@ -337,7 +343,7 @@ impl<'a, A: Application> FromContext<'a, A> for Cow<'a, str> {
     ) -> Result<Self, A::Error> {
         match path_str(req, state)? {
             Some(s) => Ok(s),
-            None => Err(ClientError::NotFound.into()),
+            None => Err(Error::PathComponentMissing.into()),
         }
     }
 }
@@ -362,15 +368,12 @@ impl<'a, A: Application> FromContext<'a, A> for String {
     ) -> Result<Self, A::Error> {
         match path_str(req, state)? {
             Some(s) => Ok(s.into_owned()),
-            None => Err(ClientError::NotFound.into()),
+            None => Err(Error::PathComponentMissing.into()),
         }
     }
 }
 
-fn path_str<'a>(
-    req: &'a Parts,
-    state: &mut PathState,
-) -> Result<Option<Cow<'a, str>>, ClientError> {
+fn path_str<'a>(req: &'a Parts, state: &mut PathState) -> Result<Option<Cow<'a, str>>, Error> {
     let s = match state.next(&req.uri.path()) {
         Some(s) => s,
         None => return Ok(None),
@@ -379,7 +382,7 @@ fn path_str<'a>(
     percent_decode_str(s)
         .decode_utf8()
         .map(Some)
-        .map_err(|_| ClientError::NotFound)
+        .map_err(|_| Error::PathDecode)
 }
 
 from_context_from_str!(bool);
@@ -403,74 +406,40 @@ macro_rules! deserialize_body {
     ($req:ident, $bytes:ident) => {
         match $req.headers.get("content-type") {
             Some(t) if t == "application/x-www-form-urlencoded" => {
-                serde_urlencoded::from_bytes::<T>(&$bytes)
-                    .map_err(|e| FromBodyError::Deserialize(e.into()))
+                serde_urlencoded::from_bytes::<T>(&$bytes).map_err(Error::BodyDecodeForm)
             }
             #[cfg(feature = "serde_json")]
-            Some(t) if t == "application/json" => serde_json::from_slice::<T>(&$bytes)
-                .map_err(|e| FromBodyError::Deserialize(e.into())),
+            Some(t) if t == "application/json" => {
+                serde_json::from_slice::<T>(&$bytes).map_err(Error::BodyDecodeJson)
+            }
             #[cfg(feature = "uploads")]
             Some(t) if t.as_bytes().starts_with(b"multipart/form-data") => {
                 crate::forms::from_form_data::<T>(&$req.headers, &$bytes)
-                    .map_err(|e| FromBodyError::Deserialize(e.into()))
+                    .map_err(Error::BodyDecodeMultipart)
             }
-            None => Err(FromBodyError::NoType),
-            _ => Err(FromBodyError::UnknownType),
+            Some(t) => Err(Error::BodyUnknownType(
+                String::from_utf8_lossy(t.as_bytes()).into_owned(),
+            )),
+            None => Err(Error::BodyNoType),
         }
     };
 }
 
 #[cfg(feature = "with-http-body")]
-async fn from_body<B, T: serde::de::DeserializeOwned>(
-    req: &Parts,
-    body: B,
-) -> Result<T, FromBodyError>
+async fn from_body<B, T: serde::de::DeserializeOwned>(req: &Parts, body: B) -> Result<T, Error>
 where
     B: HttpBody,
     B::Error: Into<Box<dyn StdError + Send + Sync>>,
 {
-    let bytes = to_bytes(body)
-        .await
-        .map_err(|e| FromBodyError::Receive(e.into()))?;
+    let bytes = to_bytes(body).await.map_err(|_| Error::BodyReceive)?;
     deserialize_body!(req, bytes)
 }
 
 fn from_bytes<'de, T: serde::de::Deserialize<'de>>(
     req: &Parts,
     bytes: &'de [u8],
-) -> Result<T, FromBodyError> {
+) -> Result<T, Error> {
     deserialize_body!(req, bytes)
-}
-
-pub enum FromBodyError {
-    Receive(Box<dyn StdError + Send + Sync>),
-    Deserialize(Box<dyn StdError + Send + Sync>),
-    NoType,
-    UnknownType,
-}
-
-impl fmt::Display for FromBodyError {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use FromBodyError::*;
-        match self {
-            Receive(e) => write!(fmt, "{}", e),
-            Deserialize(e) => write!(fmt, "{}", e),
-            NoType => write!(fmt, "no Content-Type found in request"),
-            UnknownType => write!(fmt, "unsupported Content-Type in request"),
-        }
-    }
-}
-
-impl From<FromBodyError> for ClientError {
-    fn from(e: FromBodyError) -> ClientError {
-        use FromBodyError::*;
-        match e {
-            Receive(_) => ClientError::BadRequest,
-            Deserialize(_) => ClientError::UnprocessableEntity,
-            NoType => ClientError::BadRequest,
-            UnknownType => ClientError::UnsupportedMediaType,
-        }
-    }
 }
 
 #[cfg(feature = "with-http-body")]
@@ -570,81 +539,56 @@ impl PathState {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum ClientError {
-    BadRequest,
-    Unauthorized,
-    PaymentRequired,
-    Forbidden,
-    NotFound,
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("method not allowed")]
     MethodNotAllowed,
-    NotAcceptable,
-    ProxyAuthenticationRequired,
-    RequestTimeout,
-    Conflict,
-    Gone,
-    LengthRequired,
-    PreconditionFailed,
-    PayloadTooLarge,
-    RequestUriTooLong,
-    UnsupportedMediaType,
-    RequestedRangeNotSatisfiable,
-    ExpectationFailed,
-    MisdirectedRequest,
-    UnprocessableEntity,
-    Locked,
-    FailedDependency,
-    UpgradeRequired,
-    PreconditionRequired,
-    TooManyRequests,
-    RequestHeaderFieldsTooLarge,
-    UnavailableForLegalReasons,
+    #[error("no matching routes")]
+    PathNotFound,
+    #[error("missing path component")]
+    PathComponentMissing,
+    #[error("unable to parse path component")]
+    PathParse,
+    #[error("unable to decode UTF-8 from path component")]
+    PathDecode,
+    #[error("no query in request URL")]
+    QueryMissing,
+    #[error("unable to decode request URI query: {0}")]
+    QueryDecode(serde_urlencoded::de::Error),
+    #[error("unable to receive request body")]
+    BodyReceive,
+    #[cfg(feature = "json")]
+    #[error("unable to decode body as JSON: {0}")]
+    BodyDecodeJson(#[from] serde_json::Error),
+    #[error("unable to decode body as form data: {0}")]
+    BodyDecodeForm(serde_urlencoded::de::Error),
+    #[cfg(feature = "uploads")]
+    #[error("unable to decode body as multipart form data: {0}")]
+    BodyDecodeMultipart(#[from] crate::multipart::Error),
+    #[error("content type on request body unknown: {0}")]
+    BodyUnknownType(String),
+    #[error("no content type on request body")]
+    BodyNoType,
+    #[cfg(feature = "static")]
+    #[error("file not found")]
+    FileNotFound,
 }
 
-impl From<ClientError> for StatusCode {
-    fn from(e: ClientError) -> StatusCode {
-        use ClientError::*;
+impl From<&Error> for StatusCode {
+    fn from(e: &Error) -> StatusCode {
+        use Error::*;
         match e {
-            BadRequest => StatusCode::BAD_REQUEST,
-            Unauthorized => StatusCode::UNAUTHORIZED,
-            PaymentRequired => StatusCode::PAYMENT_REQUIRED,
-            Forbidden => StatusCode::FORBIDDEN,
-            NotFound => StatusCode::NOT_FOUND,
             MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
-            NotAcceptable => StatusCode::NOT_ACCEPTABLE,
-            ProxyAuthenticationRequired => StatusCode::PROXY_AUTHENTICATION_REQUIRED,
-            RequestTimeout => StatusCode::REQUEST_TIMEOUT,
-            Conflict => StatusCode::CONFLICT,
-            Gone => StatusCode::GONE,
-            LengthRequired => StatusCode::LENGTH_REQUIRED,
-            PreconditionFailed => StatusCode::PRECONDITION_FAILED,
-            PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
-            RequestUriTooLong => StatusCode::URI_TOO_LONG,
-            UnsupportedMediaType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            RequestedRangeNotSatisfiable => StatusCode::RANGE_NOT_SATISFIABLE,
-            ExpectationFailed => StatusCode::EXPECTATION_FAILED,
-            MisdirectedRequest => StatusCode::MISDIRECTED_REQUEST,
-            UnprocessableEntity => StatusCode::UNPROCESSABLE_ENTITY,
-            Locked => StatusCode::LOCKED,
-            FailedDependency => StatusCode::FAILED_DEPENDENCY,
-            UpgradeRequired => StatusCode::UPGRADE_REQUIRED,
-            PreconditionRequired => StatusCode::PRECONDITION_REQUIRED,
-            TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
-            RequestHeaderFieldsTooLarge => StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE,
-            UnavailableForLegalReasons => StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS,
+            QueryMissing | QueryDecode(_) | BodyNoType => StatusCode::BAD_REQUEST,
+            BodyUnknownType(_) => StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            PathNotFound | PathComponentMissing | PathParse | PathDecode | FileNotFound => {
+                StatusCode::NOT_FOUND
+            }
+            BodyReceive => StatusCode::INTERNAL_SERVER_ERROR,
+            BodyDecodeJson(_) | BodyDecodeForm(_) | BodyDecodeMultipart(_) => {
+                StatusCode::UNPROCESSABLE_ENTITY
+            }
         }
-    }
-}
-
-impl std::error::Error for ClientError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
-    }
-}
-
-impl fmt::Display for ClientError {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(fmt, "{}", StatusCode::from(*self))
     }
 }
 

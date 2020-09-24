@@ -4,9 +4,7 @@ pub use http;
 #[cfg(feature = "application")]
 pub mod application;
 #[cfg(feature = "application")]
-pub use application::{
-    get, handler, post, route, scope, Application, ClientError, Context, FromContext,
-};
+pub use application::{get, handler, post, route, scope, Application, Context, Error, FromContext};
 
 #[cfg(feature = "askama")]
 pub mod askama;

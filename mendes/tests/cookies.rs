@@ -8,7 +8,7 @@ use mendes::application::Responder;
 use mendes::cookies::{cookie, AppWithAeadKey, AppWithCookies, Key};
 use mendes::http::header::{COOKIE, SET_COOKIE};
 use mendes::http::{Request, Response, StatusCode};
-use mendes::{get, route, Application, ClientError, Context};
+use mendes::{get, route, Application, Context};
 use serde::{Deserialize, Serialize};
 
 #[tokio::test]
@@ -96,20 +96,27 @@ struct Session {
 
 #[derive(Debug)]
 enum Error {
-    Client(ClientError),
+    Mendes(mendes::Error),
 }
 
-impl From<ClientError> for Error {
-    fn from(e: ClientError) -> Self {
-        Error::Client(e)
+impl From<mendes::Error> for Error {
+    fn from(e: mendes::Error) -> Self {
+        Error::Mendes(e)
+    }
+}
+
+impl From<&Error> for StatusCode {
+    fn from(e: &Error) -> StatusCode {
+        let Error::Mendes(e) = e;
+        StatusCode::from(e)
     }
 }
 
 impl Responder<App> for Error {
     fn into_response(self, _: &App) -> Response<String> {
-        let Error::Client(err) = self;
+        let Error::Mendes(err) = self;
         Response::builder()
-            .status(StatusCode::from(err))
+            .status(StatusCode::from(&err))
             .body(err.to_string())
             .unwrap()
     }

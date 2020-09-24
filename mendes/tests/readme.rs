@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use hyper::Body;
 use mendes::application::Responder;
 use mendes::http::{Response, StatusCode};
-use mendes::{get, route, Application, ClientError, Context};
+use mendes::{get, route, Application, Context};
 
 #[get]
 async fn hello(_: &App) -> Result<Response<Body>, Error> {
@@ -32,20 +32,27 @@ impl Application for App {
 
 #[derive(Debug)]
 enum Error {
-    Client(ClientError),
+    Mendes(mendes::Error),
 }
 
-impl From<ClientError> for Error {
-    fn from(e: ClientError) -> Error {
-        Error::Client(e)
+impl From<mendes::Error> for Error {
+    fn from(e: mendes::Error) -> Self {
+        Error::Mendes(e)
+    }
+}
+
+impl From<&Error> for StatusCode {
+    fn from(e: &Error) -> StatusCode {
+        let Error::Mendes(e) = e;
+        StatusCode::from(e)
     }
 }
 
 impl Responder<App> for Error {
     fn into_response(self, _: &App) -> Response<Body> {
-        let Error::Client(err) = self;
+        let Error::Mendes(err) = self;
         Response::builder()
-            .status(StatusCode::from(err))
+            .status(StatusCode::from(&err))
             .body(err.to_string().into())
             .unwrap()
     }
