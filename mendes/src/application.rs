@@ -378,7 +378,7 @@ fn path_str<'a>(
 
     percent_decode_str(s)
         .decode_utf8()
-        .map(|s| Some(s))
+        .map(Some)
         .map_err(|_| ClientError::NotFound)
 }
 
