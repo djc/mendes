@@ -118,7 +118,7 @@ where
             ) #rtype #where_clause {
                 match &cx.req.method {
                     #method_patterns => {}
-                    _ => return Err(mendes::application::ClientError::MethodNotAllowed.into()),
+                    _ => return Err(mendes::Error::MethodNotAllowed.into()),
                 }
                 #prefix
                 call(#args).await
@@ -320,7 +320,7 @@ impl quote::ToTokens for PathMap {
 
         if !wildcard {
             route_tokens.extend(quote!(
-                _ => cx.error(::mendes::ClientError::NotFound),
+                _ => cx.error(::mendes::Error::PathNotFound.into()),
             ));
         }
 
@@ -372,7 +372,7 @@ impl quote::ToTokens for MethodMap {
 
         if !wildcard {
             route_tokens.extend(quote!(
-                _ => cx.error(::mendes::ClientError::MethodNotAllowed),
+                _ => cx.error(::mendes::Error::MethodNotAllowed.into()),
             ));
         }
 

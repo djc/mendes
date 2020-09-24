@@ -5,7 +5,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use mendes::application::Responder;
 use mendes::http::{Method, Request, Response, StatusCode};
-use mendes::{get, handler, route, Application, ClientError, Context};
+use mendes::{get, handler, route, Application, Context};
 
 #[tokio::test]
 async fn test_method_get() {
@@ -49,7 +49,7 @@ async fn test_nested_right() {
 async fn test_numbered_invalid() {
     let rsp = handle(path_request("/numbered/Foo")).await;
     assert_eq!(rsp.status(), StatusCode::NOT_FOUND);
-    assert_eq!(rsp.into_body(), "404 Not Found");
+    assert_eq!(rsp.into_body(), "unable to parse path component");
 }
 
 #[tokio::test]
@@ -70,14 +70,14 @@ async fn test_named() {
 async fn test_named_no_arg() {
     let rsp = handle(path_request("/named")).await;
     assert_eq!(rsp.status(), StatusCode::NOT_FOUND);
-    assert_eq!(rsp.into_body(), "404 Not Found");
+    assert_eq!(rsp.into_body(), "missing path component");
 }
 
 #[tokio::test]
 async fn test_magic_404() {
     let rsp = handle(path_request("/foo")).await;
     assert_eq!(rsp.status(), StatusCode::NOT_FOUND);
-    assert_eq!(rsp.into_body(), "404 Not Found");
+    assert_eq!(rsp.into_body(), "no matching routes");
 }
 
 #[tokio::test]
@@ -167,20 +167,27 @@ async fn hello(_: &App) -> Result<Response<String>, Error> {
 
 #[derive(Debug)]
 enum Error {
-    Client(ClientError),
+    Mendes(mendes::Error),
 }
 
-impl From<ClientError> for Error {
-    fn from(e: ClientError) -> Self {
-        Error::Client(e)
+impl From<mendes::Error> for Error {
+    fn from(e: mendes::Error) -> Self {
+        Error::Mendes(e)
+    }
+}
+
+impl From<&Error> for StatusCode {
+    fn from(e: &Error) -> StatusCode {
+        let Error::Mendes(e) = e;
+        StatusCode::from(e)
     }
 }
 
 impl Responder<App> for Error {
     fn into_response(self, _: &App) -> Response<String> {
-        let Error::Client(err) = self;
+        let Error::Mendes(err) = self;
         Response::builder()
-            .status(StatusCode::from(err))
+            .status(StatusCode::from(&err))
             .body(err.to_string())
             .unwrap()
     }
