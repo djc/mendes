@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+#[cfg(feature = "with-http-body")]
 use std::error::Error as StdError;
 use std::net::SocketAddr;
 use std::str;
@@ -581,13 +582,16 @@ impl From<&Error> for StatusCode {
             MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
             QueryMissing | QueryDecode(_) | BodyNoType => StatusCode::BAD_REQUEST,
             BodyUnknownType(_) => StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            PathNotFound | PathComponentMissing | PathParse | PathDecode | FileNotFound => {
-                StatusCode::NOT_FOUND
-            }
+            PathNotFound | PathComponentMissing | PathParse | PathDecode => StatusCode::NOT_FOUND,
             BodyReceive => StatusCode::INTERNAL_SERVER_ERROR,
-            BodyDecodeJson(_) | BodyDecodeForm(_) | BodyDecodeMultipart(_) => {
-                StatusCode::UNPROCESSABLE_ENTITY
-            }
+            BodyDecodeForm(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            #[cfg(feature = "json")]
+            BodyDecodeJson(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            #[cfg(feature = "uploads")]
+            BodyDecodeMultipart(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            #[cfg(feature = "static")]
+            FileNotFound => StatusCode::NOT_FOUND,
+
         }
     }
 }
