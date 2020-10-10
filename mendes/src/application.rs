@@ -591,7 +591,6 @@ impl From<&Error> for StatusCode {
             BodyDecodeMultipart(_) => StatusCode::UNPROCESSABLE_ENTITY,
             #[cfg(feature = "static")]
             FileNotFound => StatusCode::NOT_FOUND,
-
         }
     }
 }
