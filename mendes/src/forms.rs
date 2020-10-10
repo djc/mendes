@@ -181,10 +181,7 @@ impl Item {
 
     fn multipart(&self) -> bool {
         match &self.contents {
-            ItemContents::Single(f) => match f {
-                Field::File(_) => true,
-                _ => false,
-            },
+            ItemContents::Single(f) => matches!(f, Field::File(_)),
             ItemContents::Multi(items) => items.iter().any(|i| i.multipart()),
         }
     }
