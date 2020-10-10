@@ -19,7 +19,7 @@ where
 {
     type ServerError = hyper::Error;
 
-    async fn serve(self: Self, addr: &SocketAddr) -> Result<(), hyper::Error> {
+    async fn serve(self, addr: &SocketAddr) -> Result<(), hyper::Error> {
         let app = Arc::new(self);
         hyper::Server::bind(addr)
             .serve(make_service_fn(move |addr: &AddrStream| {
