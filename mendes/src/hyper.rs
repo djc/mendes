@@ -137,7 +137,7 @@ mod encoding {
                 ));
                 rsp
             }
-            Some(Encoding::Identity) | None => return rsp,
+            Some(Encoding::Identity) | None => rsp,
         }
     }
 
