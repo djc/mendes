@@ -59,6 +59,117 @@ where
     }
 }
 
+#[cfg(feature = "compression")]
+mod encoding {
+    use std::str::FromStr;
+    use std::{io, mem};
+
+    use async_compression::stream::BrotliEncoder;
+    use async_compression::stream::DeflateEncoder;
+    use async_compression::stream::GzipEncoder;
+    use futures_util::stream::TryStreamExt;
+    use http::header::{HeaderValue, ACCEPT_ENCODING, CONTENT_ENCODING};
+    use http::Response;
+
+    use super::*;
+
+    pub fn encode_content(req: &Parts, mut rsp: Response<Body>) -> Response<Body> {
+        let accept = match req.headers.get(ACCEPT_ENCODING).map(|hv| hv.to_str()) {
+            Some(Ok(accept)) => accept,
+            _ => return rsp,
+        };
+
+        let mut encodings = accept
+            .split(',')
+            .filter_map(|s| {
+                let mut parts = s.splitn(2, ';');
+                let alg = match Encoding::from_str(parts.next()?.trim()) {
+                    Ok(encoding) => encoding,
+                    Err(()) => return None,
+                };
+
+                let qual = parts
+                    .next()
+                    .and_then(|s| {
+                        let mut parts = s.splitn(2, '=');
+                        if parts.next()?.trim() != "q" {
+                            return None;
+                        }
+
+                        let value = parts.next()?;
+                        Some(f64::from_str(value).ok()?)
+                    })
+                    .unwrap_or(1.0);
+
+                Some((alg, (qual * 100.0) as u64))
+            })
+            .collect::<Vec<_>>();
+        encodings.sort_by_key(|(algo, qual)| (-(*qual as i64), *algo));
+
+        match encodings.first().map(|v| v.0) {
+            #[cfg(feature = "brotli")]
+            Some(Encoding::Brotli) => {
+                let orig = mem::replace(rsp.body_mut(), Body::empty());
+                rsp.headers_mut()
+                    .insert(CONTENT_ENCODING, HeaderValue::from_static("br"));
+                *rsp.body_mut() = Body::wrap_stream(BrotliEncoder::new(
+                    orig.map_err(|e| io::Error::new(io::ErrorKind::Other, e)),
+                ));
+                rsp
+            }
+            #[cfg(feature = "gzip")]
+            Some(Encoding::Gzip) => {
+                rsp.headers_mut()
+                    .insert(CONTENT_ENCODING, HeaderValue::from_static("gzip"));
+                let orig = mem::replace(rsp.body_mut(), Body::empty());
+                *rsp.body_mut() = Body::wrap_stream(GzipEncoder::new(
+                    orig.map_err(|e| io::Error::new(io::ErrorKind::Other, e)),
+                ));
+                rsp
+            }
+            #[cfg(feature = "deflate")]
+            Some(Encoding::Deflate) => {
+                rsp.headers_mut()
+                    .insert(CONTENT_ENCODING, HeaderValue::from_static("deflate"));
+                let orig = mem::replace(rsp.body_mut(), Body::empty());
+                *rsp.body_mut() = Body::wrap_stream(DeflateEncoder::new(
+                    orig.map_err(|e| io::Error::new(io::ErrorKind::Other, e)),
+                ));
+                rsp
+            }
+            Some(Encoding::Identity) | None => return rsp,
+        }
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+    enum Encoding {
+        #[cfg(feature = "brotli")]
+        Brotli,
+        #[cfg(feature = "gzip")]
+        Gzip,
+        #[cfg(feature = "deflate")]
+        Deflate,
+        Identity,
+    }
+
+    impl FromStr for Encoding {
+        type Err = ();
+
+        fn from_str(s: &str) -> Result<Encoding, ()> {
+            Ok(match s {
+                "identity" => Encoding::Identity,
+                "gzip" => Encoding::Gzip,
+                "deflate" => Encoding::Deflate,
+                "br" => Encoding::Brotli,
+                _ => return Err(()),
+            })
+        }
+    }
+}
+
+#[cfg(feature = "compression")]
+pub use encoding::encode_content;
+
 pub struct ClientAddr(SocketAddr);
 
 impl std::ops::Deref for ClientAddr {
