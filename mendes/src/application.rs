@@ -448,7 +448,7 @@ async fn to_bytes<T>(body: T) -> Result<Bytes, T::Error>
 where
     T: HttpBody,
 {
-    futures_util::pin_mut!(body);
+    pin_utils::pin_mut!(body);
 
     // If there's only 1 chunk, we can just return Buf::to_bytes()
     let mut first = if let Some(buf) = body.data().await {
