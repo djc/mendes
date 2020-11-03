@@ -174,9 +174,8 @@ where
 
     // This should only be used by procedural routing macros.
     #[doc(hidden)]
-    pub fn rewind(mut self) -> Self {
+    pub fn rewind(&mut self) {
         self.path.rewind();
-        self
     }
 
     // This should only be used by procedural routing macros.

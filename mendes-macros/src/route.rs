@@ -114,7 +114,7 @@ where
         let where_clause = &ast.sig.generics.where_clause;
         quote!(
             #nested_vis async fn handler#generics(
-                mut cx: mendes::application::Context<#app_type>
+                cx: &mut mendes::application::Context<#app_type>
             ) #rtype #where_clause {
                 match &cx.req.method {
                     #method_patterns => {}
@@ -274,7 +274,7 @@ impl quote::ToTokens for Target {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         match self {
             Target::Direct(expr) => quote!(
-                #expr::handler(cx).await.into_response(&*app)
+                #expr::handler(&mut cx).await.into_response(&*app)
             )
             .to_tokens(tokens),
             Target::MethodMap(map) => map.to_tokens(tokens),
@@ -325,7 +325,7 @@ impl quote::ToTokens for PathMap {
             if rewind {
                 quote!(
                     #component => {
-                        let mut cx = cx.rewind();
+                        cx.rewind();
                         #target
                     }
                 )
