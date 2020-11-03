@@ -200,7 +200,9 @@ pub fn route(mut ast: syn::ItemFn, root: bool) -> TokenStream {
         use mendes::application::Responder;
         let app = #self_name.clone();
         let mut cx = mendes::Context::new(#self_name, #req_name);
-        #routes
+        let rsp = #routes;
+        let mendes::Context { app, req, .. } = cx;
+        app.respond(&req, rsp).await
     });
 
     *block = Box::new(syn::parse::<syn::Block>(new.into()).unwrap());

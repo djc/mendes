@@ -44,6 +44,14 @@ pub trait Application: Sized {
         req: Request<Self::RequestBody>,
     ) -> Response<Self::ResponseBody>;
 
+    async fn respond(
+        &self,
+        _req: &Parts,
+        rsp: Response<Self::ResponseBody>,
+    ) -> Response<Self::ResponseBody> {
+        rsp
+    }
+
     fn from_body_bytes<'de, T: serde::de::Deserialize<'de>>(
         req: &Parts,
         bytes: &'de [u8],
