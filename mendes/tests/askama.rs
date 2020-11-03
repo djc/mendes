@@ -1,11 +1,12 @@
 #![cfg(feature = "askama")]
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use hyper::Body;
 use mendes::application::Responder;
 use mendes::askama::Template;
-use mendes::http::{Response, StatusCode};
-use mendes::{get, route, Application, Context};
+use mendes::http::{Request, Response, StatusCode};
+use mendes::{get, route, Application};
 
 #[get]
 async fn hello(_: &App) -> Result<HelloTemplate<'static>, Error> {
@@ -27,7 +28,7 @@ impl Application for App {
     type Error = Error;
 
     #[route]
-    async fn handle(mut cx: Context<Self>) -> Response<Body> {
+    async fn handle(self: Arc<App>, req: Request<()>) -> Response<Body> {
         path! {
             _ => hello,
         }

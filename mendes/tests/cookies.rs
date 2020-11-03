@@ -8,7 +8,7 @@ use mendes::application::Responder;
 use mendes::cookies::{cookie, AppWithAeadKey, AppWithCookies, Key};
 use mendes::http::header::{COOKIE, SET_COOKIE};
 use mendes::http::{Request, Response, StatusCode};
-use mendes::{get, route, Application, Context};
+use mendes::{get, route, Application};
 use serde::{Deserialize, Serialize};
 
 #[tokio::test]
@@ -20,14 +20,14 @@ async fn cookie() {
         ]),
     });
 
-    let rsp = handle(app.clone(), path_request("/store")).await;
+    let rsp = app.clone().handle(path_request("/store")).await;
     assert_eq!(rsp.status(), StatusCode::OK);
     let set = rsp.headers().get(SET_COOKIE).unwrap();
     let value = set.to_str().unwrap().split(';').next().unwrap();
 
     let mut req = path_request("/extract");
     req.headers_mut().insert(COOKIE, value.try_into().unwrap());
-    let rsp = handle(app.clone(), req).await;
+    let rsp = app.handle(req).await;
     assert_eq!(rsp.status(), StatusCode::OK);
     assert_eq!(rsp.into_body(), "user = 37");
 }
@@ -37,11 +37,6 @@ fn path_request(path: &str) -> Request<()> {
         .uri(format!("https://example.com{}", path))
         .body(())
         .unwrap()
-}
-
-async fn handle(app: Arc<App>, req: Request<()>) -> Response<String> {
-    let cx = Context::new(app, req);
-    App::handle(cx).await
 }
 
 struct App {
@@ -61,7 +56,7 @@ impl Application for App {
     type Error = Error;
 
     #[route]
-    async fn handle(mut cx: Context<Self>) -> Response<Self::ResponseBody> {
+    async fn handle(self: Arc<App>, req: Request<()>) -> Response<Self::ResponseBody> {
         path! {
             Some("store") => store,
             Some("extract") => extract,

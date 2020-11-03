@@ -31,15 +31,18 @@ pub use mendes_macros::{get, handler, post, route, scope};
 /// into a `Response`.
 #[async_trait]
 pub trait Application: Sized {
-    type RequestBody;
-    type ResponseBody;
+    type RequestBody: Send;
+    type ResponseBody: Send;
     type Error: Responder<Self> + WithStatus + From<Error> + Send;
 
-    async fn prepare(&self, _: &mut Parts) -> Result<(), Self::Error> {
+    async fn prepare(&self, _: &mut Request<Self::RequestBody>) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    async fn handle(cx: Context<Self>) -> Response<Self::ResponseBody>;
+    async fn handle(
+        self: Arc<Self>,
+        req: Request<Self::RequestBody>,
+    ) -> Response<Self::ResponseBody>;
 
     fn from_body_bytes<'de, T: serde::de::Deserialize<'de>>(
         req: &Parts,

@@ -175,15 +175,19 @@ fn visibility(path: &str) -> syn::Visibility {
 }
 
 pub fn route(mut ast: syn::ItemFn, root: bool) -> TokenStream {
-    let (block, routes) = match ast.block.stmts.get_mut(0) {
+    let (block, routes, self_name, req_name) = match ast.block.stmts.get_mut(0) {
         Some(syn::Stmt::Item(syn::Item::Macro(expr))) => {
             let target = Target::from_item(expr);
-            (&mut ast.block, target)
+            let self_name = argument_name(&ast.sig, 0).unwrap();
+            let req_name = argument_name(&ast.sig, 1).unwrap();
+            (&mut ast.block, target, self_name, req_name)
         }
         Some(syn::Stmt::Item(syn::Item::Fn(inner))) => {
             if let Some(syn::Stmt::Item(syn::Item::Macro(expr))) = inner.block.stmts.get(0) {
                 let target = Target::from_item(expr);
-                (&mut inner.block, target)
+                let self_name = argument_name(&inner.sig, 0).unwrap();
+                let req_name = argument_name(&inner.sig, 1).unwrap();
+                (&mut inner.block, target, self_name, req_name)
             } else {
                 panic!("did not find expression statement in nested function block")
             }
@@ -194,7 +198,8 @@ pub fn route(mut ast: syn::ItemFn, root: bool) -> TokenStream {
     let new = quote!({
         use mendes::Application;
         use mendes::application::Responder;
-        let app = cx.app().clone();
+        let app = #self_name.clone();
+        let mut cx = mendes::Context::new(#self_name, #req_name);
         #routes
     });
 
@@ -213,6 +218,18 @@ pub fn route(mut ast: syn::ItemFn, root: bool) -> TokenStream {
         #ast
     })
     .into()
+}
+
+fn argument_name(sig: &syn::Signature, i: usize) -> Option<&syn::Ident> {
+    let pat = match sig.inputs.iter().nth(i)? {
+        syn::FnArg::Typed(arg) => &arg.pat,
+        _ => return None,
+    };
+
+    match &**pat {
+        syn::Pat::Ident(ident) => Some(&ident.ident),
+        _ => None,
+    }
 }
 
 #[allow(clippy::large_enum_variant)]
