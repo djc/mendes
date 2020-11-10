@@ -5,7 +5,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use mendes::application::Responder;
 use mendes::http::{Method, Request, Response, StatusCode};
-use mendes::{get, handler, route, Application};
+use mendes::{get, handler, route, scope, Application, Context};
 
 #[tokio::test]
 async fn test_method_get() {
@@ -118,11 +118,20 @@ impl Application for App {
                 Some("right") => nested_right,
                 _ => nested_rest,
             },
+            Some("scoped") => scoped,
             Some("method") => method! {
                 GET => hello,
                 POST => named,
             }
         }
+    }
+}
+
+#[scope]
+async fn scoped(cx: &mut Context<App>) -> Response<String> {
+    path! {
+        Some("right") => nested_right,
+        _ => nested_rest,
     }
 }
 
