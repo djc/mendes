@@ -178,15 +178,15 @@ pub fn route(mut ast: syn::ItemFn, root: bool) -> TokenStream {
     let (block, routes, self_name, req_name) = match ast.block.stmts.get_mut(0) {
         Some(syn::Stmt::Item(syn::Item::Macro(expr))) => {
             let target = Target::from_item(expr);
-            let self_name = argument_name(&ast.sig, 0).unwrap();
-            let req_name = argument_name(&ast.sig, 1).unwrap();
+            let self_name = argument_name(&ast.sig, 0);
+            let req_name = argument_name(&ast.sig, 1);
             (&mut ast.block, target, self_name, req_name)
         }
         Some(syn::Stmt::Item(syn::Item::Fn(inner))) => {
             if let Some(syn::Stmt::Item(syn::Item::Macro(expr))) = inner.block.stmts.get(0) {
                 let target = Target::from_item(expr);
-                let self_name = argument_name(&inner.sig, 0).unwrap();
-                let req_name = argument_name(&inner.sig, 1).unwrap();
+                let self_name = argument_name(&inner.sig, 0);
+                let req_name = argument_name(&inner.sig, 1);
                 (&mut inner.block, target, self_name, req_name)
             } else {
                 panic!("did not find expression statement in nested function block")
@@ -195,20 +195,33 @@ pub fn route(mut ast: syn::ItemFn, root: bool) -> TokenStream {
         _ => panic!("did not find expression statement in block"),
     };
 
+    if root {
+        let self_name = self_name.unwrap();
+        let req_name = req_name.unwrap();
+
+        let new = quote!({
+            use mendes::Application;
+            use mendes::application::Responder;
+            let app = #self_name.clone();
+            let mut cx = mendes::Context::new(#self_name, #req_name);
+            let rsp = #routes;
+            let mendes::Context { app, req, .. } = cx;
+            app.respond(&req, rsp).await
+        });
+
+        *block = Box::new(syn::parse::<syn::Block>(new.into()).unwrap());
+        return ast.to_token_stream().into();
+    }
+
+    let cx_name = self_name.unwrap();
     let new = quote!({
         use mendes::Application;
         use mendes::application::Responder;
-        let app = #self_name.clone();
-        let mut cx = mendes::Context::new(#self_name, #req_name);
-        let rsp = #routes;
-        let mendes::Context { app, req, .. } = cx;
-        app.respond(&req, rsp).await
+        let mut cx = #cx_name;
+        let app = cx.app.clone();
+        #routes
     });
-
     *block = Box::new(syn::parse::<syn::Block>(new.into()).unwrap());
-    if root {
-        return ast.to_token_stream().into();
-    }
 
     let name = ast.sig.ident.clone();
     let orig_vis = ast.vis.clone();
