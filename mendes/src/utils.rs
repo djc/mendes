@@ -30,4 +30,5 @@ mod file_mod {
 }
 
 #[cfg(feature = "static")]
+#[cfg_attr(docsrs, doc(cfg(feature = "static")))]
 pub use file_mod::file;

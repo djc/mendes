@@ -10,6 +10,7 @@ use crate::application::{Application, Responder};
 
 pub use askama::*;
 
+#[doc(hidden)]
 pub fn into_response<A, T>(app: &A, t: &T, ext: Option<&str>) -> Response<A::ResponseBody>
 where
     A: Application,

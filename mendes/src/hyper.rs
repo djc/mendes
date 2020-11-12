@@ -57,6 +57,7 @@ where
 }
 
 #[cfg(feature = "compression")]
+#[cfg_attr(docsrs, doc(cfg(feature = "compression")))]
 mod encoding {
     use std::str::FromStr;
     use std::{io, mem};
@@ -165,6 +166,7 @@ mod encoding {
 }
 
 #[cfg(feature = "compression")]
+#[cfg_attr(docsrs, doc(cfg(feature = "application")))]
 pub use encoding::encode_content;
 
 pub struct ClientAddr(SocketAddr);

@@ -4,6 +4,7 @@ use std::{fmt, str};
 pub use mendes_macros::{form, ToField};
 
 #[cfg(feature = "uploads")]
+#[cfg_attr(docsrs, doc(cfg(feature = "uploads")))]
 pub use crate::multipart::{from_form_data, File};
 
 /// A data type that knows how to generate an HTML form for itself
@@ -572,6 +573,7 @@ impl ToField for f32 {
 }
 
 #[cfg(feature = "chrono")]
+#[cfg_attr(docsrs, doc(cfg(feature = "chrono")))]
 impl ToField for chrono::NaiveDate {
     fn to_field(name: Cow<'static, str>, _: &[(&str, &str)]) -> Field {
         Field::Date(Date { name, value: None })

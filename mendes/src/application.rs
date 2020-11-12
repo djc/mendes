@@ -48,6 +48,7 @@ pub trait Application: Sized {
     }
 
     #[cfg(feature = "with-http-body")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "with-http-body")))]
     async fn from_body<T: serde::de::DeserializeOwned>(
         req: &Parts,
         body: Self::RequestBody,
@@ -61,6 +62,7 @@ pub trait Application: Sized {
     }
 
     #[cfg(feature = "with-http-body")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "with-http-body")))]
     async fn body_bytes<B>(body: B) -> Result<Bytes, B::Error>
     where
         B: HttpBody + Send,
@@ -420,6 +422,7 @@ macro_rules! deserialize_body {
 }
 
 #[cfg(feature = "with-http-body")]
+#[cfg_attr(docsrs, doc(cfg(feature = "with-http-body")))]
 async fn from_body<B, T: serde::de::DeserializeOwned>(req: &Parts, body: B) -> Result<T, Error>
 where
     B: HttpBody,
@@ -437,6 +440,7 @@ fn from_bytes<'de, T: serde::de::Deserialize<'de>>(
 }
 
 #[cfg(feature = "with-http-body")]
+#[cfg_attr(docsrs, doc(cfg(feature = "with-http-body")))]
 async fn to_bytes<T>(body: T) -> Result<Bytes, T::Error>
 where
     T: HttpBody,

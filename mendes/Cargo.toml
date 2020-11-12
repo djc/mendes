@@ -1,6 +1,6 @@
 [package]
 name = "mendes"
-version = "0.0.50"
+version = "0.0.51"
 authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
 description = "Rust web toolkit for impatient perfectionists"
 documentation = "https://docs.rs/mendes"
@@ -59,3 +59,7 @@ twoway = { version = "0.2.1", optional = true }
 
 [dev-dependencies]
 tokio = { version = "0.2.11", features = ["macros", "rt-core"] }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

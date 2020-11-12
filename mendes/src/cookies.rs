@@ -12,9 +12,11 @@ use ring::{aead, rand};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 #[cfg(feature = "application")]
+#[cfg_attr(docsrs, doc(cfg(feature = "application")))]
 pub use application::{AppWithAeadKey, AppWithCookies};
 
 #[cfg(feature = "application")]
+#[cfg_attr(docsrs, doc(cfg(feature = "application")))]
 mod application {
     use super::*;
     use crate::application::Application;
