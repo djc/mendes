@@ -13,6 +13,7 @@ workspace = ".."
 readme = "../README.md"
 
 [features]
+default = ["application"]
 application = ["async-trait", "http", "mendes-macros", "percent-encoding", "serde", "serde_urlencoded"]
 brotli = ["compression", "async-compression/brotli"]
 compression = ["async-compression", "futures-util"]

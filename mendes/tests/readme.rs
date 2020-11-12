@@ -1,4 +1,4 @@
-#![cfg(feature = "application")]
+#![cfg(all(feature = "application", feature = "hyper"))]
 use std::sync::Arc;
 
 use async_trait::async_trait;
