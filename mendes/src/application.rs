@@ -35,22 +35,10 @@ pub trait Application: Sized {
     type ResponseBody: Send;
     type Error: Responder<Self> + WithStatus + From<Error> + Send;
 
-    async fn prepare(&self, _: &mut Request<Self::RequestBody>) -> Result<(), Self::Error> {
-        Ok(())
-    }
-
     async fn handle(
         self: Arc<Self>,
         req: Request<Self::RequestBody>,
     ) -> Response<Self::ResponseBody>;
-
-    async fn respond(
-        &self,
-        _req: &Parts,
-        rsp: Response<Self::ResponseBody>,
-    ) -> Response<Self::ResponseBody> {
-        rsp
-    }
 
     fn from_body_bytes<'de, T: serde::de::Deserialize<'de>>(
         req: &Parts,

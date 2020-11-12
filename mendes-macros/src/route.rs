@@ -175,53 +175,85 @@ fn visibility(path: &str) -> syn::Visibility {
 }
 
 pub fn route(mut ast: syn::ItemFn, root: bool) -> TokenStream {
-    let (block, routes, self_name, req_name) = match ast.block.stmts.get_mut(0) {
-        Some(syn::Stmt::Item(syn::Item::Macro(expr))) => {
-            let target = Target::from_item(expr);
-            let self_name = argument_name(&ast.sig, 0);
-            let req_name = argument_name(&ast.sig, 1);
-            (&mut ast.block, target, self_name, req_name)
-        }
-        Some(syn::Stmt::Item(syn::Item::Fn(inner))) => {
-            if let Some(syn::Stmt::Item(syn::Item::Macro(expr))) = inner.block.stmts.get(0) {
-                let target = Target::from_item(expr);
-                let self_name = argument_name(&inner.sig, 0);
-                let req_name = argument_name(&inner.sig, 1);
-                (&mut inner.block, target, self_name, req_name)
-            } else {
-                panic!("did not find expression statement in nested function block")
-            }
-        }
-        _ => panic!("did not find expression statement in block"),
+    let (sig, stmts) = match ast.block.stmts.get_mut(0) {
+        // If the first statement is an function, we'll assume this came from  #[async_trait]
+        Some(syn::Stmt::Item(syn::Item::Fn(inner))) => (&inner.sig, &mut inner.block.stmts),
+        _ => (&ast.sig, &mut ast.block.stmts),
     };
 
+    let (idx, target, routes) = stmts
+        .iter_mut()
+        .enumerate()
+        .find_map(|(i, stmt)| {
+            let site = match stmt {
+                syn::Stmt::Local(local) => local
+                    .init
+                    .as_mut()
+                    .map(|init| MacroSite::Expr(&mut *init.1)),
+                syn::Stmt::Expr(expr) => Some(MacroSite::Expr(expr)),
+                syn::Stmt::Item(_) => Some(MacroSite::ItemStmt(stmt)),
+                _ => None,
+            }?;
+
+            let mac = match site {
+                MacroSite::Expr(syn::Expr::Macro(mac)) => &mut mac.mac,
+                MacroSite::ItemStmt(syn::Stmt::Item(syn::Item::Macro(mac))) => &mut mac.mac,
+                _ => return None,
+            };
+
+            let path = &mac.path;
+            if !path.is_ident("path") && !path.is_ident("method") {
+                return None;
+            }
+
+            let routes = Target::from_macro(&mac);
+            Some((i, site, routes))
+        })
+        .expect("did not find 'path' or 'method' macro");
+
+    let expr = syn::parse::<syn::Expr>(quote!(#routes).into()).unwrap();
+    match target {
+        MacroSite::Expr(dst) => {
+            *dst = expr;
+        }
+        MacroSite::ItemStmt(stmt) => {
+            *stmt = syn::Stmt::Expr(expr);
+        }
+    }
+
+    let self_name = argument_name(sig, 0);
+    let req_name = argument_name(sig, 1);
     if root {
         let self_name = self_name.unwrap();
         let req_name = req_name.unwrap();
 
-        let new = quote!({
-            use mendes::Application;
-            use mendes::application::Responder;
-            let app = #self_name.clone();
-            let mut cx = mendes::Context::new(#self_name, #req_name);
-            let rsp = #routes;
-            let mendes::Context { app, req, .. } = cx;
-            app.respond(&req, rsp).await
-        });
+        let prefix = syn::parse::<syn::Block>(
+            quote!({
+                use mendes::Application;
+                use mendes::application::Responder;
+                let app = #self_name.clone();
+                let mut cx = mendes::Context::new(#self_name, #req_name);
+            })
+            .into(),
+        )
+        .unwrap();
 
-        *block = Box::new(syn::parse::<syn::Block>(new.into()).unwrap());
+        stmts.splice(idx..idx, prefix.stmts.into_iter());
         return ast.to_token_stream().into();
     }
 
     let cx_name = self_name.unwrap();
-    let new = quote!({
-        use mendes::Application;
-        use mendes::application::Responder;
-        let mut cx = #cx_name;
-        let app = cx.app.clone();
-        #routes
-    });
-    *block = Box::new(syn::parse::<syn::Block>(new.into()).unwrap());
+    let prefix = syn::parse::<syn::Block>(
+        quote!({
+            use mendes::Application;
+            use mendes::application::Responder;
+            let mut cx = #cx_name;
+            let app = cx.app.clone();
+        })
+        .into(),
+    )
+    .unwrap();
+    stmts.splice(idx..idx, prefix.stmts.into_iter());
 
     let name = ast.sig.ident.clone();
     let orig_vis = ast.vis.clone();
@@ -233,6 +265,11 @@ pub fn route(mut ast: syn::ItemFn, root: bool) -> TokenStream {
         #ast
     })
     .into()
+}
+
+enum MacroSite<'a> {
+    Expr(&'a mut syn::Expr),
+    ItemStmt(&'a mut syn::Stmt),
 }
 
 fn argument_name(sig: &syn::Signature, i: usize) -> Option<&syn::Ident> {
@@ -262,10 +299,6 @@ impl Target {
         };
 
         Self::from_macro(&mac.mac)
-    }
-
-    fn from_item(expr: &syn::ItemMacro) -> Self {
-        Self::from_macro(&expr.mac)
     }
 
     fn from_macro(mac: &syn::Macro) -> Self {

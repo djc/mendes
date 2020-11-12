@@ -8,7 +8,7 @@ use hyper::server::conn::AddrStream;
 use hyper::service::{make_service_fn, service_fn};
 
 use super::Application;
-use crate::application::{FromContext, PathState, Responder, Server};
+use crate::application::{FromContext, PathState, Server};
 
 pub use hyper::Body;
 
@@ -30,10 +30,7 @@ where
                         let app = app.clone();
                         async move {
                             req.extensions_mut().insert(ClientAddr(addr));
-                            Ok::<_, Infallible>(match app.prepare(&mut req).await {
-                                Ok(()) => A::handle(app, req).await,
-                                Err(e) => e.into_response(&app),
-                            })
+                            Ok::<_, Infallible>(app.handle(req).await)
                         }
                     }))
                 }
