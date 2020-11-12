@@ -222,11 +222,6 @@ where
         let query = self.req.uri.query().ok_or(Error::QueryMissing)?;
         serde_urlencoded::from_bytes::<T>(query.as_bytes()).map_err(Error::QueryDecode)
     }
-
-    #[doc(hidden)]
-    pub fn error(&self, e: Error) -> Response<A::ResponseBody> {
-        e.into_response(&*self.app)
-    }
 }
 
 pub trait FromContext<'a, A>: Sized

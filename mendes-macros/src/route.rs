@@ -352,7 +352,7 @@ impl quote::ToTokens for PathMap {
 
         if !wildcard {
             route_tokens.extend(quote!(
-                _ => cx.error(::mendes::Error::PathNotFound.into()),
+                _ => ::mendes::Error::PathNotFound.into_response(&*app),
             ));
         }
 
@@ -404,7 +404,7 @@ impl quote::ToTokens for MethodMap {
 
         if !wildcard {
             route_tokens.extend(quote!(
-                _ => cx.error(::mendes::Error::MethodNotAllowed.into()),
+                _ => ::mendes::Error::MethodNotAllowed.into_response(&*app),
             ));
         }
 
