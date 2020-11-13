@@ -10,7 +10,7 @@ pub use http;
 /// Core of the Mendes web application toolkit
 pub mod application;
 #[cfg(feature = "application")]
-pub use application::{get, handler, post, route, scope, Application, Context, Error, FromContext};
+pub use application::{handler, route, scope, Application, Context, Error, FromContext};
 
 #[doc(hidden)]
 #[cfg(feature = "askama")]

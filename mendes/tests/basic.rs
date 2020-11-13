@@ -5,7 +5,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use mendes::application::Responder;
 use mendes::http::{Method, Request, Response, StatusCode};
-use mendes::{get, handler, route, scope, Application, Context};
+use mendes::{handler, route, scope, Application, Context};
 
 #[tokio::test]
 async fn test_method_get() {
@@ -135,7 +135,7 @@ async fn scoped(cx: &mut Context<App>) -> Response<String> {
     }
 }
 
-#[get]
+#[handler(GET)]
 async fn nested_rest(_: &App, #[rest] path: &str) -> Result<Response<String>, Error> {
     Ok(Response::builder()
         .status(StatusCode::OK)
@@ -143,7 +143,7 @@ async fn nested_rest(_: &App, #[rest] path: &str) -> Result<Response<String>, Er
         .unwrap())
 }
 
-#[get]
+#[handler(GET)]
 async fn nested_right(_: &App, num: usize) -> Result<Response<String>, Error> {
     Ok(Response::builder()
         .status(StatusCode::OK)
@@ -151,7 +151,7 @@ async fn nested_right(_: &App, num: usize) -> Result<Response<String>, Error> {
         .unwrap())
 }
 
-#[get]
+#[handler(GET)]
 async fn numbered(_: &App, num: usize) -> Result<Response<String>, Error> {
     Ok(Response::builder()
         .status(StatusCode::OK)
@@ -167,7 +167,7 @@ async fn named(_: &App, name: String) -> Result<Response<String>, Error> {
         .unwrap())
 }
 
-#[get]
+#[handler(GET)]
 async fn hello(_: &App) -> Result<Response<String>, Error> {
     Ok(Response::builder()
         .status(StatusCode::OK)

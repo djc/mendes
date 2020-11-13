@@ -6,9 +6,9 @@ use hyper::Body;
 use mendes::application::Responder;
 use mendes::askama::Template;
 use mendes::http::{Request, Response, StatusCode};
-use mendes::{get, route, Application};
+use mendes::{handler, route, Application};
 
-#[get]
+#[handler(GET)]
 async fn hello(_: &App) -> Result<HelloTemplate<'static>, Error> {
     Ok(HelloTemplate { name: "world" })
 }

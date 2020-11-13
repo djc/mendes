@@ -5,9 +5,9 @@ use async_trait::async_trait;
 use hyper::Body;
 use mendes::application::Responder;
 use mendes::http::{Request, Response, StatusCode};
-use mendes::{get, route, Application};
+use mendes::{handler, route, Application};
 
-#[get]
+#[handler(GET)]
 async fn hello(_: &App) -> Result<Response<Body>, Error> {
     Ok(Response::builder()
         .status(StatusCode::OK)

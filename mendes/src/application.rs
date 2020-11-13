@@ -18,7 +18,7 @@ use http_body::Body as HttpBody;
 use percent_encoding::percent_decode_str;
 use thiserror::Error;
 
-pub use mendes_macros::{get, handler, post, route, scope};
+pub use mendes_macros::{handler, route, scope};
 
 /// Main interface for an application or service
 ///

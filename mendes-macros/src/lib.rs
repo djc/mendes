@@ -40,18 +40,6 @@ pub fn handler(meta: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn get(_: TokenStream, item: TokenStream) -> TokenStream {
-    let ast = syn::parse::<syn::ItemFn>(item).unwrap();
-    route::handler(&["get"], ast)
-}
-
-#[proc_macro_attribute]
-pub fn post(_: TokenStream, item: TokenStream) -> TokenStream {
-    let ast = syn::parse::<syn::ItemFn>(item).unwrap();
-    route::handler(&["post"], ast)
-}
-
-#[proc_macro_attribute]
 pub fn route(_: TokenStream, item: TokenStream) -> TokenStream {
     let ast: syn::ItemFn = syn::parse::<syn::ItemFn>(item).unwrap();
     route::route(ast, true)
