@@ -62,7 +62,9 @@ where
         typed.attrs.retain(|attr| {
             if attr.path.is_ident("rest") {
                 prefix.extend(quote!(
-                    let #pat = cx.path.rest(&cx.req.uri.path());
+                    let #pat = <mendes::application::Rest<#ty> as mendes::FromContext<#app_type>>::from_context(
+                        &cx.app, &cx.req, &mut cx.path, &mut cx.body,
+                    )?.0;
                 ));
                 args.extend(quote!(#pat,));
                 done = true;

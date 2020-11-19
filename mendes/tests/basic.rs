@@ -1,6 +1,7 @@
 #![cfg(feature = "application")]
 
 use std::sync::Arc;
+use std::borrow::Cow;
 
 use async_trait::async_trait;
 use mendes::application::Responder;
@@ -136,7 +137,7 @@ async fn scoped(cx: &mut Context<App>) -> Response<String> {
 }
 
 #[handler(GET)]
-async fn nested_rest(_: &App, #[rest] path: &str) -> Result<Response<String>, Error> {
+async fn nested_rest(_: &App, #[rest] path: Cow<'_, str>) -> Result<Response<String>, Error> {
     Ok(Response::builder()
         .status(StatusCode::OK)
         .body(format!("nested rest {}", path))

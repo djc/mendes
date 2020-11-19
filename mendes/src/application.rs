@@ -166,12 +166,6 @@ where
 
     // This should only be used by procedural routing macros.
     #[doc(hidden)]
-    pub fn rest(&mut self) -> &str {
-        self.path.rest(&self.req.uri.path())
-    }
-
-    // This should only be used by procedural routing macros.
-    #[doc(hidden)]
     pub fn rewind(&mut self) {
         self.path.rewind();
     }
@@ -419,6 +413,35 @@ macro_rules! deserialize_body {
             None => Err(Error::BodyNoType),
         }
     };
+}
+
+#[doc(hidden)]
+pub struct Rest<T>(pub T);
+
+impl<'a, A: Application> FromContext<'a, A> for Rest<&'a [u8]> {
+    fn from_context(
+        _: &'a Arc<A>,
+        req: &'a Parts,
+        state: &mut PathState,
+        _: &mut Option<A::RequestBody>,
+    ) -> Result<Self, A::Error> {
+        Ok(Rest(state.rest(&req.uri.path()).as_bytes()))
+    }
+}
+
+impl<'a, A: Application> FromContext<'a, A> for Rest<Cow<'a, str>> {
+    fn from_context(
+        _: &'a Arc<A>,
+        req: &'a Parts,
+        state: &mut PathState,
+        _: &mut Option<A::RequestBody>,
+    ) -> Result<Self, A::Error> {
+        Ok(Rest(
+            percent_decode_str(state.rest(&req.uri.path()))
+                .decode_utf8()
+                .map_err(|_| Error::PathDecode)?,
+        ))
+    }
 }
 
 #[cfg(feature = "with-http-body")]
