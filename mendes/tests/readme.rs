@@ -4,6 +4,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use hyper::Body;
 use mendes::application::Responder;
+use mendes::http::request::Parts;
 use mendes::http::{Request, Response, StatusCode};
 use mendes::{handler, route, Application};
 
@@ -50,7 +51,7 @@ impl From<&Error> for StatusCode {
 }
 
 impl Responder<App> for Error {
-    fn into_response(self, _: &App) -> Response<Body> {
+    fn into_response(self, _: &App, _: &Parts) -> Response<Body> {
         let Error::Mendes(err) = self;
         Response::builder()
             .status(StatusCode::from(&err))

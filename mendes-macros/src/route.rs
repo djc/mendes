@@ -324,7 +324,7 @@ impl quote::ToTokens for Target {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         match self {
             Target::Direct(expr) => quote!(
-                #expr::handler(&mut cx).await.into_response(&*app)
+                #expr::handler(&mut cx).await.into_response(&*app, &cx.req)
             )
             .to_tokens(tokens),
             Target::MethodMap(map) => map.to_tokens(tokens),
@@ -387,7 +387,7 @@ impl quote::ToTokens for PathMap {
 
         if !wildcard {
             route_tokens.extend(quote!(
-                _ => ::mendes::Error::PathNotFound.into_response(&*app),
+                _ => ::mendes::Error::PathNotFound.into_response(&*app, &cx.req),
             ));
         }
 
@@ -439,7 +439,7 @@ impl quote::ToTokens for MethodMap {
 
         if !wildcard {
             route_tokens.extend(quote!(
-                _ => ::mendes::Error::MethodNotAllowed.into_response(&*app),
+                _ => ::mendes::Error::MethodNotAllowed.into_response(&*app, &cx.req),
             ));
         }
 

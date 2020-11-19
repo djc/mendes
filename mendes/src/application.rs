@@ -88,11 +88,11 @@ pub trait WithStatus {}
 impl<T> WithStatus for T where StatusCode: for<'a> From<&'a T> {}
 
 pub trait Responder<A: Application> {
-    fn into_response(self, app: &A) -> Response<A::ResponseBody>;
+    fn into_response(self, app: &A, req: &Parts) -> Response<A::ResponseBody>;
 }
 
 impl<A: Application> Responder<A> for Response<A::ResponseBody> {
-    fn into_response(self, _: &A) -> Response<A::ResponseBody> {
+    fn into_response(self, _: &A, _: &Parts) -> Response<A::ResponseBody> {
         self
     }
 }
@@ -101,17 +101,17 @@ impl<A: Application, T> Responder<A> for Result<T, A::Error>
 where
     T: Responder<A>,
 {
-    fn into_response(self, app: &A) -> Response<A::ResponseBody> {
+    fn into_response(self, app: &A, req: &Parts) -> Response<A::ResponseBody> {
         match self {
-            Ok(rsp) => rsp.into_response(app),
-            Err(e) => e.into_response(app),
+            Ok(rsp) => rsp.into_response(app, req),
+            Err(e) => e.into_response(app, req),
         }
     }
 }
 
 impl<A: Application> Responder<A> for Error {
-    fn into_response(self, app: &A) -> Response<A::ResponseBody> {
-        A::Error::from(self).into_response(app)
+    fn into_response(self, app: &A, req: &Parts) -> Response<A::ResponseBody> {
+        A::Error::from(self).into_response(app, req)
     }
 }
 

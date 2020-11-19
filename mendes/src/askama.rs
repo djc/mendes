@@ -1,9 +1,8 @@
 use std::convert::TryFrom;
 
-use http::{
-    header::{HeaderValue, CONTENT_LENGTH, CONTENT_TYPE},
-    Response,
-};
+use http::header::{HeaderValue, CONTENT_LENGTH, CONTENT_TYPE};
+use http::request::Parts;
+use http::Response;
 use mime_guess::MimeGuess;
 
 use crate::application::{Application, Responder};
@@ -11,7 +10,12 @@ use crate::application::{Application, Responder};
 pub use askama::*;
 
 #[doc(hidden)]
-pub fn into_response<A, T>(app: &A, t: &T, ext: Option<&str>) -> Response<A::ResponseBody>
+pub fn into_response<A, T>(
+    app: &A,
+    req: &Parts,
+    t: &T,
+    ext: Option<&str>,
+) -> Response<A::ResponseBody>
 where
     A: Application,
     T: Template,
@@ -20,7 +24,7 @@ where
 {
     let content = match t.render() {
         Ok(content) => content,
-        Err(e) => return <A::Error as From<_>>::from(e).into_response(app),
+        Err(e) => return <A::Error as From<_>>::from(e).into_response(app, req),
     };
 
     let mut builder = Response::builder();

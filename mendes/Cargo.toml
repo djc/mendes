@@ -31,7 +31,7 @@ postgres = ["bytes", "tokio-postgres", "postgres-types", "postgres-types/derive"
 static = ["application", "tokio/fs", "mime_guess", "http"]
 
 [dependencies]
-askama = { version = "0.10.3", optional = true, features = ["with-mendes"] }
+askama = { version = "0.10.5", optional = true, features = ["with-mendes"] }
 async-compression = { version = "0.3.5", features = ["stream"], optional = true }
 async-trait = { version = "0.1.24", optional = true }
 bincode = { version = "1.3.1", optional = true }

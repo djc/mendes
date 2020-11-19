@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use hyper::Body;
 use mendes::application::Responder;
 use mendes::askama::Template;
+use mendes::http::request::Parts;
 use mendes::http::{Request, Response, StatusCode};
 use mendes::{handler, route, Application};
 
@@ -63,7 +64,7 @@ impl std::fmt::Display for Error {
 }
 
 impl Responder<App> for Error {
-    fn into_response(self, _: &App) -> Response<Body> {
+    fn into_response(self, _: &App, _: &Parts) -> Response<Body> {
         Response::builder()
             .status(StatusCode::from(&self))
             .body(self.to_string().into())
