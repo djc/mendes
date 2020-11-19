@@ -71,7 +71,11 @@ where
                 special = true;
                 false
             } else if attr.path.is_ident("query") {
-                prefix.extend(quote!(let #pat = cx.query::<#ty>()?;));
+                prefix.extend(quote!(
+                    let #pat = <mendes::application::Query<#ty> as mendes::FromContext<#app_type>>::from_context(
+                        &cx.app, &cx.req, &mut cx.path, &mut cx.body,
+                    )?.0;
+                ));
                 args.extend(quote!(#pat,));
                 special = true;
                 false

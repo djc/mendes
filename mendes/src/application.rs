@@ -199,13 +199,6 @@ where
     pub fn headers(&self) -> &http::HeaderMap {
         &self.req.headers
     }
-
-    // This should only be used by procedural routing macros.
-    #[doc(hidden)]
-    pub fn query<'de, T: serde::de::Deserialize<'de>>(&'de self) -> Result<T, Error> {
-        let query = self.req.uri.query().ok_or(Error::QueryMissing)?;
-        serde_urlencoded::from_bytes::<T>(query.as_bytes()).map_err(Error::QueryDecode)
-    }
 }
 
 pub trait FromContext<'a, A>: Sized
@@ -441,6 +434,26 @@ impl<'a, A: Application> FromContext<'a, A> for Rest<Cow<'a, str>> {
                 .decode_utf8()
                 .map_err(|_| Error::PathDecode)?,
         ))
+    }
+}
+
+#[doc(hidden)]
+pub struct Query<T>(pub T);
+
+impl<'de, 'a: 'de, A: Application, T> FromContext<'a, A> for Query<T>
+where
+    T: serde::Deserialize<'de>,
+{
+    fn from_context(
+        _: &'a Arc<A>,
+        req: &'a Parts,
+        _: &mut PathState,
+        _: &mut Option<A::RequestBody>,
+    ) -> Result<Self, A::Error> {
+        let query = req.uri.query().ok_or(Error::QueryMissing)?;
+        let data =
+            serde_urlencoded::from_bytes::<T>(query.as_bytes()).map_err(Error::QueryDecode)?;
+        Ok(Query(data))
     }
 }
 
