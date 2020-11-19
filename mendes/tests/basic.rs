@@ -9,6 +9,14 @@ use mendes::http::request::Parts;
 use mendes::http::{Method, Request, Response, StatusCode};
 use mendes::{handler, route, scope, Application, Context};
 
+#[cfg(feature = "serde-derive")]
+#[tokio::test]
+async fn test_query() {
+    let rsp = handle(path_request("/query?foo=3&bar=baz")).await;
+    assert_eq!(rsp.status(), StatusCode::OK);
+    assert_eq!(rsp.into_body(), "query: Query { foo: 3, bar: \"baz\" }");
+}
+
 #[tokio::test]
 async fn test_method_get() {
     let rsp = handle(path_request("/method")).await;
@@ -125,6 +133,8 @@ impl Application for App {
                 GET => hello,
                 POST => named,
             }
+            #[cfg(feature = "serde-derive")]
+            Some("query") => with_query,
         }
     }
 }
@@ -135,6 +145,22 @@ async fn scoped(cx: &mut Context<App>) -> Response<String> {
         Some("right") => nested_right,
         _ => nested_rest,
     }
+}
+
+#[cfg(feature = "serde-derive")]
+#[handler(GET)]
+async fn with_query(_: &App, #[query] query: Query<'_>) -> Result<Response<String>, Error> {
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .body(format!("query: {:?}", query))
+        .unwrap())
+}
+
+#[cfg(feature = "serde-derive")]
+#[derive(Debug, serde::Deserialize)]
+struct Query<'a> {
+    foo: usize,
+    bar: Cow<'a, str>,
 }
 
 #[handler(GET)]
