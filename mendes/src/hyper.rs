@@ -62,8 +62,11 @@ mod encoding {
     use std::str::FromStr;
     use std::{io, mem};
 
+    #[cfg(feature = "brotli")]
     use async_compression::stream::BrotliEncoder;
+    #[cfg(feature = "deflate")]
     use async_compression::stream::DeflateEncoder;
+    #[cfg(feature = "gzip")]
     use async_compression::stream::GzipEncoder;
     use futures_util::stream::TryStreamExt;
     use http::header::{HeaderValue, ACCEPT_ENCODING, CONTENT_ENCODING};
@@ -156,8 +159,11 @@ mod encoding {
         fn from_str(s: &str) -> Result<Encoding, ()> {
             Ok(match s {
                 "identity" => Encoding::Identity,
+                #[cfg(feature = "gzip")]
                 "gzip" => Encoding::Gzip,
+                #[cfg(feature = "deflate")]
                 "deflate" => Encoding::Deflate,
+                #[cfg(feature = "brotli")]
                 "br" => Encoding::Brotli,
                 _ => return Err(()),
             })
