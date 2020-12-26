@@ -63,14 +63,15 @@ mod encoding {
     use std::{io, mem};
 
     #[cfg(feature = "brotli")]
-    use async_compression::stream::BrotliEncoder;
+    use async_compression::tokio::bufread::BrotliEncoder;
     #[cfg(feature = "deflate")]
-    use async_compression::stream::DeflateEncoder;
+    use async_compression::tokio::bufread::DeflateEncoder;
     #[cfg(feature = "gzip")]
-    use async_compression::stream::GzipEncoder;
+    use async_compression::tokio::bufread::GzipEncoder;
     use futures_util::stream::TryStreamExt;
     use http::header::{HeaderValue, ACCEPT_ENCODING, CONTENT_ENCODING};
     use http::Response;
+    use tokio_util::io::{ReaderStream, StreamReader};
 
     use super::*;
 
@@ -113,9 +114,9 @@ mod encoding {
                 let orig = mem::replace(rsp.body_mut(), Body::empty());
                 rsp.headers_mut()
                     .insert(CONTENT_ENCODING, HeaderValue::from_static("br"));
-                *rsp.body_mut() = Body::wrap_stream(BrotliEncoder::new(
-                    orig.map_err(|e| io::Error::new(io::ErrorKind::Other, e)),
-                ));
+                *rsp.body_mut() = Body::wrap_stream(ReaderStream::new(BrotliEncoder::new(
+                    StreamReader::new(orig.map_err(|e| io::Error::new(io::ErrorKind::Other, e))),
+                )));
                 rsp
             }
             #[cfg(feature = "gzip")]
@@ -123,9 +124,9 @@ mod encoding {
                 rsp.headers_mut()
                     .insert(CONTENT_ENCODING, HeaderValue::from_static("gzip"));
                 let orig = mem::replace(rsp.body_mut(), Body::empty());
-                *rsp.body_mut() = Body::wrap_stream(GzipEncoder::new(
-                    orig.map_err(|e| io::Error::new(io::ErrorKind::Other, e)),
-                ));
+                *rsp.body_mut() = Body::wrap_stream(ReaderStream::new(GzipEncoder::new(
+                    StreamReader::new(orig.map_err(|e| io::Error::new(io::ErrorKind::Other, e))),
+                )));
                 rsp
             }
             #[cfg(feature = "deflate")]
@@ -133,9 +134,9 @@ mod encoding {
                 rsp.headers_mut()
                     .insert(CONTENT_ENCODING, HeaderValue::from_static("deflate"));
                 let orig = mem::replace(rsp.body_mut(), Body::empty());
-                *rsp.body_mut() = Body::wrap_stream(DeflateEncoder::new(
-                    orig.map_err(|e| io::Error::new(io::ErrorKind::Other, e)),
-                ));
+                *rsp.body_mut() = Body::wrap_stream(ReaderStream::new(DeflateEncoder::new(
+                    StreamReader::new(orig.map_err(|e| io::Error::new(io::ErrorKind::Other, e))),
+                )));
                 rsp
             }
             Some(Encoding::Identity) | None => rsp,
