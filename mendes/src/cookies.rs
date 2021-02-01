@@ -5,11 +5,13 @@ use std::time::{Duration, SystemTime};
 
 pub use bincode;
 use data_encoding::{BASE64URL_NOPAD, HEXLOWER};
+use http::header::InvalidHeaderValue;
 use http::{HeaderMap, HeaderValue};
 pub use mendes_macros::cookie;
 use ring::rand::SecureRandom;
 use ring::{aead, rand};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use thiserror::Error;
 
 #[cfg(feature = "application")]
 #[cfg_attr(docsrs, doc(cfg(feature = "application")))]
@@ -39,7 +41,7 @@ mod application {
             &self,
             headers: &mut HeaderMap,
             data: Option<T>,
-        ) -> Result<(), ()> {
+        ) -> Result<(), Error> {
             headers.append(SET_COOKIE, self.set_cookie_header(data)?);
             Ok(())
         }
@@ -49,7 +51,7 @@ mod application {
         /// If `data` is `Some`, a new value will be set. If the value is `None`, an
         /// empty value is set with an expiry time in the past, causing the cookie
         /// to be deleted in compliant clients.
-        fn set_cookie_header<T: CookieData>(&self, data: Option<T>) -> Result<HeaderValue, ()>;
+        fn set_cookie_header<T: CookieData>(&self, data: Option<T>) -> Result<HeaderValue, Error>;
     }
 
     impl<A> AppWithCookies for A
@@ -60,7 +62,7 @@ mod application {
             extract(self.key(), headers)
         }
 
-        fn set_cookie_header<T: CookieData>(&self, data: Option<T>) -> Result<HeaderValue, ()> {
+        fn set_cookie_header<T: CookieData>(&self, data: Option<T>) -> Result<HeaderValue, Error> {
             match data {
                 Some(data) => store(self.key(), data),
                 None => tombstone(T::NAME),
@@ -175,46 +177,59 @@ fn extract<T: CookieData>(key: &Key, headers: &HeaderMap) -> Option<T> {
     None
 }
 
-fn store<T: CookieData>(key: &Key, data: T) -> Result<HeaderValue, ()> {
+fn store<T: CookieData>(key: &Key, data: T) -> Result<HeaderValue, Error> {
     let expiration = T::expires().unwrap_or_else(|| Duration::new(NO_EXPIRY, 0));
-    let expires = SystemTime::now().checked_add(expiration).ok_or(())?;
+    let expires = SystemTime::now()
+        .checked_add(expiration)
+        .ok_or(Error::ExpiryWindowTooLong)?;
     let cookie = Cookie { expires, data };
-    let bytes = bincode::serialize(&cookie).map_err(|_| ())?;
+    let bytes = bincode::serialize(&cookie)?;
     let mut data = vec![0; NONCE_LEN + bytes.len() + TAG_LEN];
 
     let (nonce, in_out) = data.split_at_mut(NONCE_LEN);
     let (plain, tag) = in_out.split_at_mut(bytes.len());
     plain.copy_from_slice(&bytes);
 
-    rand::SystemRandom::new().fill(nonce).map_err(|_| ())?;
-    let nonce = aead::Nonce::try_assume_unique_for_key(nonce).map_err(|_| ())?;
+    rand::SystemRandom::new()
+        .fill(nonce)
+        .map_err(|_| Error::GetRandomFailed)?;
+    let nonce = aead::Nonce::try_assume_unique_for_key(nonce).unwrap(); // valid nonce length
 
     let ad = aead::Aad::from(T::NAME.as_bytes());
-    let ad_tag = key
-        .0
-        .seal_in_place_separate_tag(nonce, ad, plain)
-        .map_err(|_| ())?;
+    let ad_tag = key.0.seal_in_place_separate_tag(nonce, ad, plain).unwrap(); // unique nonce
     tag.copy_from_slice(ad_tag.as_ref());
 
     let mut s = format!("{}={}; Path=/", T::NAME, BASE64URL_NOPAD.encode(&data));
     if let Some(duration) = T::expires() {
-        let expires = chrono::Utc::now() + chrono::Duration::from_std(duration).map_err(|_| ())?;
+        let expires = chrono::Utc::now()
+            + chrono::Duration::from_std(duration).map_err(|_| Error::ExpiryWindowTooLong)?;
         write!(
             s,
             "; Expires={}",
             expires.format("%a, %d %b %Y %H:%M:%S GMT")
         )
-        .map_err(|_| ())?;
+        .unwrap(); // writing to a string buffer seems safe enough
     }
-    HeaderValue::try_from(s).map_err(|_| ())
+    Ok(HeaderValue::try_from(s)?)
 }
 
-fn tombstone(name: &str) -> Result<HeaderValue, ()> {
-    HeaderValue::try_from(format!(
+fn tombstone(name: &str) -> Result<HeaderValue, Error> {
+    Ok(HeaderValue::try_from(format!(
         "{}=None; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT",
         name
-    ))
-    .map_err(|_| ())
+    ))?)
+}
+
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("unstable to serialize cookie data")]
+    DataSerializationFailed(#[from] bincode::Error),
+    #[error("expiry window too long")]
+    ExpiryWindowTooLong,
+    #[error("failed to acquire random bytes for nonce")]
+    GetRandomFailed,
+    #[error("non-ASCII cookie name")]
+    InvalidCookieName(#[from] InvalidHeaderValue),
 }
 
 const NONCE_LEN: usize = 12;
