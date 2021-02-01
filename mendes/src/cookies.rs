@@ -119,9 +119,13 @@ impl Key {
     /// Create key from slice of hexadecimal characters
     ///
     /// This will fail if the length of the slice is not equal to 32.
-    pub fn from_hex_lower(s: &[u8]) -> Result<Self, ()> {
-        let bytes = HEXLOWER.decode(s).map_err(|_| ())?;
-        Ok(Self::new((&*bytes).try_into().map_err(|_| ())?))
+    pub fn from_hex_lower(s: &[u8]) -> Result<Self, Error> {
+        let bytes = HEXLOWER
+            .decode(s)
+            .map_err(|_| Error::InvalidKeyCharacters)?;
+        Ok(Self::new(
+            (&*bytes).try_into().map_err(|_| Error::InvalidKeyLength)?,
+        ))
     }
 }
 
@@ -230,6 +234,10 @@ pub enum Error {
     GetRandomFailed,
     #[error("non-ASCII cookie name")]
     InvalidCookieName(#[from] InvalidHeaderValue),
+    #[error("invalid key characters")]
+    InvalidKeyCharacters,
+    #[error("invalid key length")]
+    InvalidKeyLength,
 }
 
 const NONCE_LEN: usize = 12;
