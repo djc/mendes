@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::{fmt, str};
 
 pub use mendes_macros::{form, ToField};
+use thiserror::Error;
 
 #[cfg(feature = "uploads")]
 #[cfg_attr(docsrs, doc(cfg(feature = "uploads")))]
@@ -43,16 +44,11 @@ impl Form {
         self
     }
 
-    pub fn set<T: fmt::Display>(mut self, name: &str, value: T) -> Result<Self, ()> {
+    pub fn set<T: fmt::Display>(mut self, name: &str, value: T) -> Result<Self, Error> {
         self.sets
             .iter_mut()
             .flat_map(|s| &mut s.items)
-            .fold(Err(()), |mut res, item| {
-                if item.set(name, &value).is_ok() {
-                    res = Ok(());
-                }
-                res
-            })
+            .try_fold((), |_, item| item.set(name, &value))
             .map(|_| self)
     }
 }
@@ -111,71 +107,68 @@ pub struct Item {
 }
 
 impl Item {
-    fn set<T: fmt::Display>(&mut self, name: &str, value: &T) -> Result<(), ()> {
+    fn set<T: fmt::Display>(&mut self, name: &str, value: &T) -> Result<(), Error> {
         match &mut self.contents {
             ItemContents::Single(f) => {
-                if f.name() == Some(name) {
-                    match f {
-                        Field::Checkbox(f) => {
-                            let s = value.to_string();
-                            if s == "true" || s == "1" {
-                                f.checked = true;
-                                Ok(())
-                            } else if s == "false" || s == "0" {
-                                f.checked = false;
-                                Ok(())
-                            } else {
-                                Err(())
-                            }
-                        }
-                        Field::Date(f) => {
-                            f.value = Some(value.to_string().into());
+                if f.name() != Some(name) {
+                    return Ok(());
+                }
+
+                match f {
+                    Field::Checkbox(f) => {
+                        let s = value.to_string();
+                        if s == "true" || s == "1" {
+                            f.checked = true;
                             Ok(())
-                        }
-                        Field::Email(f) => {
-                            f.value = Some(value.to_string().into());
+                        } else if s == "false" || s == "0" {
+                            f.checked = false;
                             Ok(())
+                        } else {
+                            Err(Error::SetInvalidBooleanValue)
                         }
-                        Field::Hidden(f) => {
-                            f.value = Some(value.to_string().into());
-                            Ok(())
-                        }
-                        Field::Number(f) => {
-                            f.value = Some(value.to_string().into());
-                            Ok(())
-                        }
-                        Field::Password(f) => {
-                            f.value = Some(value.to_string().into());
-                            Ok(())
-                        }
-                        Field::Select(f) => {
-                            let val = value.to_string();
-                            for option in &mut f.options {
-                                if option.value == val {
-                                    option.selected = true;
-                                    return Ok(());
-                                }
-                            }
-                            Err(())
-                        }
-                        Field::Text(f) => {
-                            f.value = Some(value.to_string().into());
-                            Ok(())
-                        }
-                        Field::File(_) | Field::Submit(_) => Err(()),
                     }
-                } else {
-                    Err(())
+                    Field::Date(f) => {
+                        f.value = Some(value.to_string().into());
+                        Ok(())
+                    }
+                    Field::Email(f) => {
+                        f.value = Some(value.to_string().into());
+                        Ok(())
+                    }
+                    Field::Hidden(f) => {
+                        f.value = Some(value.to_string().into());
+                        Ok(())
+                    }
+                    Field::Number(f) => {
+                        f.value = Some(value.to_string().into());
+                        Ok(())
+                    }
+                    Field::Password(f) => {
+                        f.value = Some(value.to_string().into());
+                        Ok(())
+                    }
+                    Field::Select(f) => {
+                        let val = value.to_string();
+                        for option in &mut f.options {
+                            if option.value == val {
+                                option.selected = true;
+                                return Ok(());
+                            }
+                        }
+                        Err(Error::SetOptionNotFound)
+                    }
+                    Field::Text(f) => {
+                        f.value = Some(value.to_string().into());
+                        Ok(())
+                    }
+                    Field::File(_) | Field::Submit(_) => Err(Error::SetUnsupportedFieldType),
                 }
             }
             ItemContents::Multi(items) => {
-                let mut found = Err(());
                 for item in items {
-                    if item.set(name, value).is_ok() {
-                        found = Ok(());
-                    }
+                    item.set(name, value)?;
                 }
-                found
+                Ok(())
             }
         }
     }
@@ -578,4 +571,16 @@ impl ToField for chrono::NaiveDate {
     fn to_field(name: Cow<'static, str>, _: &[(&str, &str)]) -> Field {
         Field::Date(Date { name, value: None })
     }
+}
+
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("invalid value for boolean field")]
+    SetInvalidBooleanValue,
+    #[error("no option with given value found in select")]
+    SetOptionNotFound,
+    #[error("unable to set value for unknown field")]
+    SetUnknownField,
+    #[error("setting value not supported for this field type")]
+    SetUnsupportedFieldType,
 }
