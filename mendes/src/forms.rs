@@ -1,3 +1,5 @@
+#![allow(clippy::wrong_self_convention)]
+
 use std::borrow::Cow;
 use std::{fmt, str};
 
