@@ -137,6 +137,8 @@ pub trait ModelMeta {
 
 pub trait ModelType<Sys: System> {
     fn value(&self) -> &Sys::Parameter;
+
+    #[allow(clippy::wrong_self_convention)]
     fn to_column(name: Cow<'static, str>, params: &[(&str, &str)]) -> Column;
 }
 

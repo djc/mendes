@@ -1,5 +1,3 @@
-#![allow(clippy::wrong_self_convention)]
-
 use std::borrow::Cow;
 use std::{fmt, str};
 
@@ -444,6 +442,7 @@ impl fmt::Display for Text {
 }
 
 pub trait ToField {
+    #[allow(clippy::wrong_self_convention)]
     fn to_field(name: Cow<'static, str>, params: &[(&str, &str)]) -> Field;
 }
 
