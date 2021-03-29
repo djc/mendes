@@ -99,7 +99,7 @@ mod encoding {
                         }
 
                         let value = parts.next()?;
-                        Some(f64::from_str(value).ok()?)
+                        f64::from_str(value).ok()
                     })
                     .unwrap_or(1.0);
 
