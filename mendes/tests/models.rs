@@ -1,11 +1,11 @@
 #![cfg(all(feature = "models", feature = "postgres"))]
 
-use mendes::models::postgres::{types, PostgreSQL};
+use mendes::models::postgres::{types, PostgreSql};
 use mendes::models::{model, model_type, ModelMeta, Serial, System};
 
 #[test]
 fn test_model() {
-    let table = PostgreSQL::table::<Named>();
+    let table = PostgreSql::table::<Named>();
     let sql = table.to_string();
     assert_eq!(
         sql,
@@ -21,7 +21,7 @@ fn test_model() {
     );
 
     assert_eq!(
-        PostgreSQL::table::<Dependent>().to_string(),
+        PostgreSql::table::<Dependent>().to_string(),
         "CREATE TABLE dependents (\
              id serial NOT NULL, \
              named integer NOT NULL, \

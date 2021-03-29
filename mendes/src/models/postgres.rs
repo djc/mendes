@@ -7,9 +7,9 @@ use super::{Column, EnumType, Model, ModelType, Serial, System};
 
 pub use postgres_types as types;
 
-pub struct PostgreSQL {}
+pub struct PostgreSql {}
 
-impl System for PostgreSQL {
+impl System for PostgreSql {
     type Parameter = Parameter;
     type StatementReturn = Result<u64, tokio_postgres::Error>;
 }
@@ -31,7 +31,7 @@ where
     types::to_sql_checked!();
 }
 
-impl<T: EnumType> ModelType<PostgreSQL> for T
+impl<T: EnumType> ModelType<PostgreSql> for T
 where
     Self: types::ToSql + Sync + 'static,
 {
@@ -63,7 +63,7 @@ where
     }
 }
 
-impl ModelType<PostgreSQL> for bool
+impl ModelType<PostgreSql> for bool
 where
     Self: types::ToSql,
 {
@@ -82,7 +82,7 @@ where
     }
 }
 
-impl ModelType<PostgreSQL> for Serial<i32>
+impl ModelType<PostgreSql> for Serial<i32>
 where
     Self: types::ToSql,
 {
@@ -101,7 +101,7 @@ where
     }
 }
 
-impl ModelType<PostgreSQL> for i32
+impl ModelType<PostgreSql> for i32
 where
     Self: types::ToSql,
 {
@@ -120,7 +120,7 @@ where
     }
 }
 
-impl ModelType<PostgreSQL> for i64
+impl ModelType<PostgreSql> for i64
 where
     Self: types::ToSql,
 {
@@ -139,7 +139,7 @@ where
     }
 }
 
-impl ModelType<PostgreSQL> for Vec<u8>
+impl ModelType<PostgreSql> for Vec<u8>
 where
     Self: types::ToSql,
 {
@@ -158,7 +158,7 @@ where
     }
 }
 
-impl ModelType<PostgreSQL> for String
+impl ModelType<PostgreSql> for String
 where
     Self: types::ToSql,
 {
@@ -178,7 +178,7 @@ where
 }
 
 #[cfg(feature = "chrono")]
-impl ModelType<PostgreSQL> for chrono::NaiveDate
+impl ModelType<PostgreSql> for chrono::NaiveDate
 where
     Self: types::ToSql,
 {
@@ -198,7 +198,7 @@ where
 }
 
 #[cfg(feature = "chrono")]
-impl ModelType<PostgreSQL> for chrono::DateTime<chrono::FixedOffset>
+impl ModelType<PostgreSql> for chrono::DateTime<chrono::FixedOffset>
 where
     Self: types::ToSql,
 {
@@ -220,7 +220,7 @@ where
 pub struct Client(pub tokio_postgres::Client);
 
 impl Client {
-    pub async fn insert<M: Model<PostgreSQL>>(
+    pub async fn insert<M: Model<PostgreSql>>(
         &self,
         data: &M,
     ) -> Result<u64, tokio_postgres::Error> {
