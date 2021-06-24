@@ -386,26 +386,29 @@ from_context_from_str!(u128);
 from_context_from_str!(usize);
 
 macro_rules! deserialize_body {
-    ($req:ident, $bytes:ident) => {
-        match $req.headers.get("content-type") {
-            Some(t) if t == "application/x-www-form-urlencoded" => {
+    ($req:ident, $bytes:ident) => {{
+        let content_type = $req.headers.get("content-type").ok_or(Error::BodyNoType)?;
+        let ct_str = content_type.to_str().map_err(|_| {
+            Error::BodyUnknownType(String::from_utf8_lossy(content_type.as_bytes()).into_owned())
+        })?;
+
+        let mut parts = ct_str.splitn(2, ';');
+        match parts.next().map(|s| s.trim()) {
+            Some("application/x-www-form-urlencoded") => {
                 serde_urlencoded::from_bytes::<T>(&$bytes).map_err(Error::BodyDecodeForm)
             }
             #[cfg(feature = "serde_json")]
-            Some(t) if t == "application/json" => {
+            Some("application/json") => {
                 serde_json::from_slice::<T>(&$bytes).map_err(Error::BodyDecodeJson)
             }
             #[cfg(feature = "uploads")]
-            Some(t) if t.as_bytes().starts_with(b"multipart/form-data") => {
+            Some("multipart/form-data") => {
                 crate::forms::from_form_data::<T>(&$req.headers, &$bytes)
                     .map_err(Error::BodyDecodeMultipart)
             }
-            Some(t) => Err(Error::BodyUnknownType(
-                String::from_utf8_lossy(t.as_bytes()).into_owned(),
-            )),
-            None => Err(Error::BodyNoType),
+            Some(_) | None => Err(Error::BodyUnknownType(ct_str.to_owned())),
         }
-    };
+    }};
 }
 
 #[doc(hidden)]
