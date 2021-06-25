@@ -1,7 +1,7 @@
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
-use quote::ToTokens;
+use quote::{quote, ToTokens};
 use syn::parse_macro_input;
 
 mod cookies;
@@ -89,15 +89,16 @@ pub fn handler(meta: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn route(_: TokenStream, item: TokenStream) -> TokenStream {
-    let ast = parse_macro_input!(item as syn::ItemFn);
-    route::route(ast, true)
-}
-
-#[proc_macro_attribute]
 pub fn scope(_: TokenStream, item: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(item as syn::ItemFn);
-    route::route(ast, false)
+    route::scope(ast)
+}
+
+#[proc_macro]
+pub fn route(item: TokenStream) -> TokenStream {
+    let mut ast = parse_macro_input!(item as syn::ExprMatch);
+    route::route(&mut ast);
+    quote!(#ast).into()
 }
 
 #[proc_macro_derive(ToField, attributes(option))]

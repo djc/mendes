@@ -6,7 +6,7 @@ use hyper::Body;
 use mendes::application::Responder;
 use mendes::http::request::Parts;
 use mendes::http::{Request, Response, StatusCode};
-use mendes::{handler, route, Application};
+use mendes::{handler, route, Application, Context};
 
 #[handler(GET)]
 async fn hello(_: &App) -> Result<Response<Body>, Error> {
@@ -24,11 +24,11 @@ impl Application for App {
     type ResponseBody = Body;
     type Error = Error;
 
-    #[route]
     async fn handle(self: Arc<App>, req: Request<()>) -> Response<Body> {
-        path! {
+        let mut cx = Context::new(self, req);
+        route!(match cx.path() {
             _ => hello,
-        }
+        })
     }
 }
 
