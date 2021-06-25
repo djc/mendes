@@ -9,7 +9,7 @@ use mendes::cookies::{cookie, AppWithAeadKey, AppWithCookies, Key};
 use mendes::http::header::{COOKIE, SET_COOKIE};
 use mendes::http::request::Parts;
 use mendes::http::{Request, Response, StatusCode};
-use mendes::{handler, route, Application};
+use mendes::{handler, route, Application, Context};
 use serde::{Deserialize, Serialize};
 
 #[tokio::test]
@@ -56,12 +56,12 @@ impl Application for App {
     type ResponseBody = String;
     type Error = Error;
 
-    #[route]
     async fn handle(self: Arc<App>, req: Request<()>) -> Response<Self::ResponseBody> {
-        path! {
+        let mut cx = Context::new(self, req);
+        route!(match cx.path() {
             Some("store") => store,
             Some("extract") => extract,
-        }
+        })
     }
 }
 

@@ -131,9 +131,7 @@ pub struct Context<A>
 where
     A: Application,
 {
-    #[doc(hidden)]
     pub app: Arc<A>,
-    #[doc(hidden)]
     pub req: http::request::Parts,
     #[doc(hidden)]
     pub body: Option<A::RequestBody>,
@@ -160,7 +158,7 @@ where
 
     // This should only be used by procedural routing macros.
     #[doc(hidden)]
-    pub fn next_path(&mut self) -> Option<Cow<'_, str>> {
+    pub fn path(&mut self) -> Option<Cow<'_, str>> {
         path_str(&self.req, &mut self.path).ok().flatten()
     }
 
@@ -198,6 +196,12 @@ where
     #[doc(hidden)]
     pub fn headers(&self) -> &http::HeaderMap {
         &self.req.headers
+    }
+}
+
+impl<A: Application> AsMut<Context<A>> for Context<A> {
+    fn as_mut(&mut self) -> &mut Context<A> {
+        self
     }
 }
 

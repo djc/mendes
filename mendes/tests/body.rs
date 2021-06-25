@@ -7,7 +7,7 @@ use mendes::application::Responder;
 use mendes::http::request::Parts;
 use mendes::http::{Method, Request, Response, StatusCode};
 use mendes::hyper::Body;
-use mendes::{handler, route, Application};
+use mendes::{handler, route, Application, Context};
 
 #[cfg(feature = "json")]
 #[tokio::test]
@@ -38,15 +38,15 @@ impl Application for App {
     type ResponseBody = String;
     type Error = Error;
 
-    #[route]
     async fn handle(
         self: Arc<App>,
         req: Request<Self::RequestBody>,
     ) -> Response<Self::ResponseBody> {
-        path! {
+        let mut cx = Context::new(self, req);
+        route!(match cx.path() {
             #[cfg(feature = "json")]
             Some("sum") => sum,
-        }
+        })
     }
 }
 

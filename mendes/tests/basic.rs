@@ -115,36 +115,36 @@ impl Application for App {
     type ResponseBody = String;
     type Error = Error;
 
-    #[route]
     async fn handle(
         self: Arc<App>,
         req: Request<Self::RequestBody>,
     ) -> Response<Self::ResponseBody> {
-        path! {
+        let mut cx = Context::new(self, req);
+        route!(match cx.path() {
             Some("hello") => hello,
             Some("named") => named,
             Some("numbered") => numbered,
-            Some("nested") => path! {
+            Some("nested") => match cx.path() {
                 Some("right") => nested_right,
                 _ => nested_rest,
             },
             Some("scoped") => scoped,
-            Some("method") => method! {
+            Some("method") => match cx.method() {
                 GET => hello,
                 POST => named,
-            }
+            },
             #[cfg(feature = "serde-derive")]
             Some("query") => with_query,
-        }
+        })
     }
 }
 
 #[scope]
 async fn scoped(cx: &mut Context<App>) -> Response<String> {
-    path! {
+    route!(match cx.path() {
         Some("right") => nested_right,
         _ => nested_rest,
-    }
+    })
 }
 
 #[cfg(feature = "serde-derive")]
