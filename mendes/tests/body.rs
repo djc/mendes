@@ -9,7 +9,7 @@ use mendes::http::{Method, Request, Response, StatusCode};
 use mendes::hyper::Body;
 use mendes::{handler, route, Application};
 
-#[cfg(feature = "serde-derive")]
+#[cfg(feature = "json")]
 #[tokio::test]
 async fn test_json_decode() {
     let rsp = handle(path_request("/sum", "[1, 2, 3]")).await;
