@@ -28,10 +28,11 @@ This should definitely become more minimal over time.
 use async_trait::async_trait;
 use hyper::Body;
 use mendes::application::Responder;
+use mendes::http::request::Parts;
 use mendes::http::{Response, StatusCode};
-use mendes::{get, route, Application, Context};
+use mendes::{handler, route, Application, Context};
 
-#[get]
+#[handler(GET)]
 async fn hello(_: &App) -> Result<Response<Body>, Error> {
     Ok(Response::builder()
         .status(StatusCode::OK)
@@ -47,11 +48,10 @@ impl Application for App {
     type ResponseBody = Body;
     type Error = Error;
 
-    #[route]
     async fn handle(mut cx: Context<Self>) -> Response<Body> {
-        path! {
+        route!(match cx.path() {
             _ => hello,
-        }
+        })
     }
 }
 
@@ -74,7 +74,7 @@ impl From<&Error> for StatusCode {
 }
 
 impl Responder<App> for Error {
-    fn into_response(self, _: &App) -> Response<Body> {
+    fn into_response(self, _: &App, _: &Parts) -> Response<Body> {
         let Error::Mendes(err) = self;
         Response::builder()
             .status(StatusCode::from(&err))
