@@ -21,14 +21,14 @@ async fn cookie() {
         ]),
     });
 
-    let rsp = app.clone().handle(path_request("/store")).await;
+    let rsp = App::handle(Context::new(app.clone(), path_request("/store"))).await;
     assert_eq!(rsp.status(), StatusCode::OK);
     let set = rsp.headers().get(SET_COOKIE).unwrap();
     let value = set.to_str().unwrap().split(';').next().unwrap();
 
     let mut req = path_request("/extract");
     req.headers_mut().insert(COOKIE, value.try_into().unwrap());
-    let rsp = app.handle(req).await;
+    let rsp = App::handle(Context::new(app, req)).await;
     assert_eq!(rsp.status(), StatusCode::OK);
     assert_eq!(rsp.into_body(), "user = 37");
 }
@@ -56,8 +56,7 @@ impl Application for App {
     type ResponseBody = String;
     type Error = Error;
 
-    async fn handle(self: Arc<App>, req: Request<()>) -> Response<Self::ResponseBody> {
-        let mut cx = Context::new(self, req);
+    async fn handle(mut cx: Context<Self>) -> Response<Self::ResponseBody> {
         route!(match cx.path() {
             Some("store") => store,
             Some("extract") => extract,

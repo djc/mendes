@@ -1,11 +1,10 @@
 #![cfg(all(feature = "application", feature = "hyper"))]
-use std::sync::Arc;
 
 use async_trait::async_trait;
 use hyper::Body;
 use mendes::application::Responder;
 use mendes::http::request::Parts;
-use mendes::http::{Request, Response, StatusCode};
+use mendes::http::{Response, StatusCode};
 use mendes::{handler, route, Application, Context};
 
 #[handler(GET)]
@@ -24,8 +23,7 @@ impl Application for App {
     type ResponseBody = Body;
     type Error = Error;
 
-    async fn handle(self: Arc<App>, req: Request<()>) -> Response<Body> {
-        let mut cx = Context::new(self, req);
+    async fn handle(mut cx: Context<Self>) -> Response<Body> {
         route!(match cx.path() {
             _ => hello,
         })

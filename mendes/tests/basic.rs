@@ -104,7 +104,7 @@ fn path_request(path: &str) -> Request<()> {
 }
 
 async fn handle(req: Request<()>) -> Response<String> {
-    Arc::new(App {}).handle(req).await
+    App::handle(Context::new(Arc::new(App {}), req)).await
 }
 
 struct App {}
@@ -115,11 +115,7 @@ impl Application for App {
     type ResponseBody = String;
     type Error = Error;
 
-    async fn handle(
-        self: Arc<App>,
-        req: Request<Self::RequestBody>,
-    ) -> Response<Self::ResponseBody> {
-        let mut cx = Context::new(self, req);
+    async fn handle(mut cx: Context<Self>) -> Response<Self::ResponseBody> {
         route!(match cx.path() {
             Some("hello") => hello,
             Some("named") => named,
