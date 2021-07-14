@@ -1,11 +1,17 @@
 use std::convert::Infallible;
+use std::future::Future;
 use std::net::SocketAddr;
+use std::panic::AssertUnwindSafe;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::Poll;
 
 use async_trait::async_trait;
+use futures_util::future::{ready, CatchUnwind, FutureExt, Map, Ready};
 use http::request::Parts;
+use http::{Request, Response, StatusCode};
 use hyper::server::conn::AddrStream;
-use hyper::service::{make_service_fn, service_fn};
+use hyper::service::Service;
 
 use super::Application;
 use crate::application::{Context, FromContext, PathState, Server};
@@ -16,25 +22,102 @@ pub use hyper::Body;
 impl<A> Server for A
 where
     A: Application<RequestBody = Body, ResponseBody = Body> + Send + Sync + 'static,
+    A::Error: std::error::Error + Send + Sync,
 {
     type ServerError = hyper::Error;
 
     async fn serve(self, addr: &SocketAddr) -> Result<(), hyper::Error> {
-        let app = Arc::new(self);
         hyper::Server::bind(addr)
-            .serve(make_service_fn(move |addr: &AddrStream| {
-                let addr = addr.remote_addr();
-                let app = app.clone();
-                async move {
-                    Ok::<_, Infallible>(service_fn(move |mut req| {
-                        req.extensions_mut().insert(ClientAddr(addr));
-                        let cx = Context::new(app.clone(), req);
-                        async move { Ok::<_, Infallible>(A::handle(cx).await) }
-                    }))
-                }
-            }))
+            .serve(ApplicationService::new(self))
             .await
     }
+}
+
+struct ApplicationService<A>(Arc<A>);
+
+impl<A: Application<RequestBody = Body, ResponseBody = Body>> ApplicationService<A> {
+    fn new(app: A) -> Self {
+        Self(Arc::new(app))
+    }
+}
+
+impl<'t, A> Service<&'t AddrStream> for ApplicationService<A>
+where
+    A: Application<RequestBody = Body, ResponseBody = Body>,
+{
+    type Response = ConnectionService<A>;
+    type Error = hyper::Error;
+    type Future = Ready<Result<Self::Response, Self::Error>>;
+
+    fn poll_ready(
+        &mut self,
+        _: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, conn: &'t AddrStream) -> Self::Future {
+        ready(Ok(ConnectionService {
+            app: self.0.clone(),
+            addr: conn.remote_addr(),
+        }))
+    }
+}
+
+struct ConnectionService<A> {
+    app: Arc<A>,
+    addr: SocketAddr,
+}
+
+impl<A> Service<Request<Body>> for ConnectionService<A>
+where
+    A: Application<RequestBody = Body, ResponseBody = Body> + 'static,
+{
+    type Response = Response<Body>;
+    type Error = Infallible;
+    type Future = Map<
+        CatchUnwind<AssertUnwindSafe<Pin<Box<dyn Future<Output = Self::Response> + Send>>>>,
+        fn(
+            Result<Self::Response, Box<(dyn std::any::Any + std::marker::Send + 'static)>>,
+        ) -> Result<Self::Response, Self::Error>,
+    >;
+
+    fn poll_ready(&mut self, _: &mut std::task::Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, mut req: Request<Body>) -> Self::Future {
+        req.extensions_mut().insert(ClientAddr(self.addr));
+        let cx = Context::new(self.app.clone(), req);
+        AssertUnwindSafe(A::handle(cx))
+            .catch_unwind()
+            .map(panic_response)
+    }
+}
+
+fn panic_response(
+    result: Result<Response<Body>, Box<dyn std::any::Any + std::marker::Send + 'static>>,
+) -> Result<Response<Body>, Infallible> {
+    let error = match result {
+        Ok(rsp) => return Ok(rsp),
+        Err(e) => e,
+    };
+
+    let panic_str = if let Some(s) = error.downcast_ref::<String>() {
+        Some(s.as_str())
+    } else if let Some(s) = error.downcast_ref::<&'static str>() {
+        Some(*s)
+    } else {
+        Some("no error")
+    };
+
+    #[cfg(feature = "tracing")]
+    tracing::error!("caught panic from request handler: {:?}", panic_str);
+
+    Ok(Response::builder()
+        .status(StatusCode::INTERNAL_SERVER_ERROR)
+        .body("Caught panic".into())
+        .unwrap())
 }
 
 impl<'a, A: Application> FromContext<'a, A> for Body

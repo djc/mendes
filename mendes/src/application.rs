@@ -30,7 +30,7 @@ pub use mendes_macros::{handler, route, scope};
 /// into HTTP responses, using the `error()` method to transform the `Error` associated type
 /// into a `Response`.
 #[async_trait]
-pub trait Application: Sized {
+pub trait Application: Send + Sized {
     type RequestBody: Send;
     type ResponseBody: Send;
     type Error: Responder<Self> + WithStatus + From<Error> + Send;
