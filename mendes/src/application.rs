@@ -224,7 +224,7 @@ macro_rules! from_context_from_str {
                 _: &mut Option<A::RequestBody>,
             ) -> Result<Self, A::Error> {
                 let s = state
-                    .next(&req.uri.path())
+                    .next(req.uri.path())
                     .ok_or(Error::PathComponentMissing.into())?;
                 <$self>::from_str(s).map_err(|_| Error::PathParse.into())
             }
@@ -237,7 +237,7 @@ macro_rules! from_context_from_str {
                 state: &mut PathState,
                 _: &mut Option<A::RequestBody>,
             ) -> Result<Self, A::Error> {
-                match state.next(&req.uri.path()) {
+                match state.next(req.uri.path()) {
                     Some(s) => match <$self>::from_str(s) {
                         Ok(v) => Ok(Some(v)),
                         Err(_) => Err(Error::PathParse.into()),
@@ -289,7 +289,7 @@ impl<'a, A: Application> FromContext<'a, A> for Option<&'a [u8]> {
         state: &mut PathState,
         _: &mut Option<A::RequestBody>,
     ) -> Result<Self, A::Error> {
-        Ok(state.next(&req.uri.path()).map(|s| s.as_bytes()))
+        Ok(state.next(req.uri.path()).map(|s| s.as_bytes()))
     }
 }
 
@@ -301,7 +301,7 @@ impl<'a, A: Application> FromContext<'a, A> for &'a [u8] {
         _: &mut Option<A::RequestBody>,
     ) -> Result<Self, A::Error> {
         state
-            .next(&req.uri.path())
+            .next(req.uri.path())
             .ok_or_else(|| Error::PathComponentMissing.into())
             .map(|s| s.as_bytes())
     }
@@ -358,7 +358,7 @@ impl<'a, A: Application> FromContext<'a, A> for String {
 }
 
 fn path_str<'a>(req: &'a Parts, state: &mut PathState) -> Result<Option<Cow<'a, str>>, Error> {
-    let s = match state.next(&req.uri.path()) {
+    let s = match state.next(req.uri.path()) {
         Some(s) => s,
         None => return Ok(None),
     };
@@ -422,7 +422,7 @@ impl<'a, A: Application> FromContext<'a, A> for Rest<&'a [u8]> {
         state: &mut PathState,
         _: &mut Option<A::RequestBody>,
     ) -> Result<Self, A::Error> {
-        Ok(Rest(state.rest(&req.uri.path()).as_bytes()))
+        Ok(Rest(state.rest(req.uri.path()).as_bytes()))
     }
 }
 
@@ -434,7 +434,7 @@ impl<'a, A: Application> FromContext<'a, A> for Rest<Cow<'a, str>> {
         _: &mut Option<A::RequestBody>,
     ) -> Result<Self, A::Error> {
         Ok(Rest(
-            percent_decode_str(state.rest(&req.uri.path()))
+            percent_decode_str(state.rest(req.uri.path()))
                 .decode_utf8()
                 .map_err(|_| Error::PathDecode)?,
         ))
