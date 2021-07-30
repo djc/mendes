@@ -436,7 +436,7 @@ impl<'a> Part<'a> {
 
         let (mut name, mut filename, mut ctype) = (None, None, None);
         for header in headers {
-            let value = str::from_utf8(&header.value)
+            let value = str::from_utf8(header.value)
                 .map_err(|_| Error::custom("error while decoding UTF-8 from header value"))?;
             let header = header.name.to_string().to_ascii_lowercase();
             if header == "content-disposition" {

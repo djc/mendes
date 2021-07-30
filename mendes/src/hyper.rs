@@ -75,12 +75,7 @@ where
 {
     type Response = Response<Body>;
     type Error = Infallible;
-    type Future = Map<
-        CatchUnwind<AssertUnwindSafe<Pin<Box<dyn Future<Output = Self::Response> + Send>>>>,
-        fn(
-            Result<Self::Response, Box<(dyn std::any::Any + std::marker::Send + 'static)>>,
-        ) -> Result<Self::Response, Self::Error>,
-    >;
+    type Future = UnwindSafeHandlerFuture<Self::Response, Self::Error>;
 
     fn poll_ready(&mut self, _: &mut std::task::Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
@@ -94,6 +89,11 @@ where
             .map(panic_response)
     }
 }
+
+type UnwindSafeHandlerFuture<T, E> = Map<
+    CatchUnwind<AssertUnwindSafe<Pin<Box<dyn Future<Output = T> + Send>>>>,
+    fn(Result<T, Box<(dyn std::any::Any + std::marker::Send + 'static)>>) -> Result<T, E>,
+>;
 
 fn panic_response(
     result: Result<Response<Body>, Box<dyn std::any::Any + std::marker::Send + 'static>>,
