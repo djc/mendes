@@ -160,7 +160,6 @@ where
     }
 }
 
-
 impl ModelType<PostgreSql> for Vec<u8>
 where
     Self: types::ToSql,
