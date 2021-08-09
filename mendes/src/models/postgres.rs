@@ -141,6 +141,26 @@ where
     }
 }
 
+impl ModelType<PostgreSql> for Serial<i64>
+where
+    Self: types::ToSql,
+{
+    fn value(&self) -> &Parameter {
+        self
+    }
+
+    fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
+        Column {
+            name,
+            ty: "bigserial".into(),
+            null: false,
+            default: None,
+            type_def: None,
+        }
+    }
+}
+
+
 impl ModelType<PostgreSql> for Vec<u8>
 where
     Self: types::ToSql,
