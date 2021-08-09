@@ -1,6 +1,7 @@
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::marker::PhantomData;
 
 use serde::{Deserialize, Serialize};
 
@@ -151,5 +152,30 @@ pub trait System: Sized {
 
     fn table<M: Model<Self>>() -> Table {
         M::table()
+    }
+}
+
+pub struct Store<Sys: System> {
+    tables: HashMap<&'static str, Table>,
+    system: PhantomData<Sys>,
+}
+
+impl<Sys: System> Store<Sys> {
+    pub fn set<M: Model<Sys>>(&mut self) -> &mut Self {
+        self.tables.insert(M::TABLE_NAME, M::table());
+        self
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&'static str, &'_ Table)> {
+        self.tables.iter().map(|(name, def)| (*name, def))
+    }
+}
+
+impl<Sys: System> Default for Store<Sys> {
+    fn default() -> Self {
+        Self {
+            tables: HashMap::default(),
+            system: PhantomData::default(),
+        }
     }
 }
