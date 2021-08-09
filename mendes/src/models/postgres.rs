@@ -239,6 +239,26 @@ where
     }
 }
 
+#[cfg(feature = "chrono")]
+impl ModelType<PostgreSql> for chrono::DateTime<chrono::Utc>
+where
+    Self: types::ToSql,
+{
+    fn value(&self) -> &Parameter {
+        self
+    }
+
+    fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
+        Column {
+            name,
+            ty: "timestamp with time zone".into(),
+            null: false,
+            default: None,
+            type_def: None,
+        }
+    }
+}
+
 pub struct Client(pub tokio_postgres::Client);
 
 impl Client {
