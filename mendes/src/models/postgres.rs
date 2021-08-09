@@ -9,7 +9,7 @@ use super::{Column, EnumType, Model, ModelType, Serial, System};
 
 pub use postgres_types as types;
 
-pub struct PostgreSql {}
+pub struct PostgreSql;
 
 impl System for PostgreSql {
     type Parameter = Parameter;
