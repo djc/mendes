@@ -10,23 +10,23 @@ fn test_model() {
     assert_eq!(
         sql,
         "CREATE TYPE \"Foo\" AS ENUM('Bar', 'Baz'); \
-         CREATE TABLE nameds (\
+         CREATE TABLE named (\
              id serial NOT NULL, \
              name text NOT NULL, \
              num bigint NOT NULL, \
              foo \"Foo\" NOT NULL, \
              wrap integer NOT NULL, \
-             CONSTRAINT nameds_pkey PRIMARY KEY (id)\
+             CONSTRAINT named_pkey PRIMARY KEY (id)\
          )"
     );
 
     assert_eq!(
         PostgreSql::table::<Dependent>().to_string(),
-        "CREATE TABLE dependents (\
+        "CREATE TABLE dependent (\
              id serial NOT NULL, \
              named integer NOT NULL, \
-             CONSTRAINT dependents_pkey PRIMARY KEY (id), \
-             CONSTRAINT named FOREIGN KEY (named) REFERENCES nameds (id)\
+             CONSTRAINT dependent_pkey PRIMARY KEY (id), \
+             CONSTRAINT named FOREIGN KEY (named) REFERENCES named (id)\
          )"
     )
 }

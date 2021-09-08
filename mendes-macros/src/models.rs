@@ -13,12 +13,7 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
     };
 
     let name = &ast.ident;
-    let mut table_name = name.to_string().to_lowercase();
-    if table_name.ends_with('s') {
-        table_name.push_str("es");
-    } else {
-        table_name.push('s');
-    }
+    let table_name = name.to_string().to_lowercase();
 
     let mut pkey_ty = None;
     let mut bounds = HashSet::new();
