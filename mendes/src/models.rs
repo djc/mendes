@@ -10,7 +10,7 @@ pub use mendes_macros::{model, model_type};
 #[cfg(feature = "postgres")]
 pub mod postgres;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, PartialEq, Serialize)]
 pub struct Table {
     pub name: Cow<'static, str>,
     pub columns: Vec<Column>,
@@ -42,7 +42,7 @@ impl fmt::Display for Table {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, PartialEq, Serialize)]
 pub struct Column {
     pub name: Cow<'static, str>,
     pub ty: Cow<'static, str>,
@@ -61,13 +61,13 @@ impl fmt::Display for Column {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, PartialEq, Serialize)]
 pub enum Constraint {
     ForeignKey {
         name: Cow<'static, str>,
-        columns: Vec<Cow<'static, str>>,
+        columns: Cow<'static, [Cow<'static, str>]>,
         ref_table: Cow<'static, str>,
-        ref_columns: Vec<Cow<'static, str>>,
+        ref_columns: Cow<'static, [Cow<'static, str>]>,
     },
     PrimaryKey {
         name: Cow<'static, str>,
