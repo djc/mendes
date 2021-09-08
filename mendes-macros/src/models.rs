@@ -59,12 +59,16 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
             let mut ref_table = ty.clone();
             let last = ref_table.path.segments.last_mut().unwrap();
             last.ident = syn::Ident::new("TABLE_NAME", Span::call_site());
+
+            let mut ref_columns = ty.clone();
+            let last = ref_columns.path.segments.last_mut().unwrap();
+            last.ident = syn::Ident::new("PRIMARY_KEY_COLUMNS", Span::call_site());
             constraints.extend(quote!(
                 mendes::models::Constraint::ForeignKey {
                     name: #name.into(),
-                    columns: vec![#name.into()],
+                    columns: ::std::borrow::Cow::Borrowed(&[::std::borrow::Cow::Borrowed(#name)]),
                     ref_table: #ref_table.into(),
-                    ref_columns: vec!["id".into()],
+                    ref_columns: ::std::borrow::Cow::Borrowed(#ref_columns),
                 },
             ));
         }
@@ -144,6 +148,9 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
         impl#orig_impl_generics mendes::models::ModelMeta for #name#type_generics #where_clause {
             type PrimaryKey = #pkey_ty;
             const TABLE_NAME: &'static str = #table_name;
+            const PRIMARY_KEY_COLUMNS: &'static [::std::borrow::Cow<'static, str>] = &[
+                ::std::borrow::Cow::Borrowed("id"),
+            ];
         }
 
         impl#impl_generics mendes::models::Model<Sys> for #name#type_generics #where_clause #bounds {

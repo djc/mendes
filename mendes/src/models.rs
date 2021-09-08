@@ -137,6 +137,7 @@ pub trait Model<Sys: System>: ModelMeta {
 pub trait ModelMeta {
     type PrimaryKey;
     const TABLE_NAME: &'static str;
+    const PRIMARY_KEY_COLUMNS: &'static [Cow<'static, str>];
 }
 
 pub trait ModelType<Sys: System> {
