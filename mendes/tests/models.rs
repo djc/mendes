@@ -23,10 +23,10 @@ fn test_model() {
     assert_eq!(
         PostgreSql::table::<Dependent>().to_string(),
         "CREATE TABLE dependent (\
-             id serial NOT NULL, \
+             dep_id serial NOT NULL, \
              named integer NOT NULL, \
              CONSTRAINT named FOREIGN KEY (named) REFERENCES named (id), \
-             CONSTRAINT dependent_pkey PRIMARY KEY (id)\
+             CONSTRAINT dependent_pkey PRIMARY KEY (dep_id)\
          )"
     )
 }
@@ -56,6 +56,7 @@ struct Wrap(i32);
 #[allow(dead_code)]
 #[model]
 struct Dependent {
-    id: Serial<i32>,
+    #[model(primary_key)]
+    dep_id: Serial<i32>,
     named: <Named as ModelMeta>::PrimaryKey,
 }

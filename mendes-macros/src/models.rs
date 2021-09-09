@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fmt::Write;
 use std::str::FromStr;
 
+use darling::FromMeta;
 use proc_macro2::Span;
 use quote::quote;
 use syn::ext::IdentExt;
@@ -16,12 +17,13 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
     let table_name = name.to_string().to_lowercase();
 
     let mut id_type = None;
+    let mut pkey = None;
     let mut bounds = HashSet::new();
     let mut columns = proc_macro2::TokenStream::new();
     let mut constraints = proc_macro2::TokenStream::new();
     let mut column_names = Vec::with_capacity(fields.named.len());
     let mut params = proc_macro2::TokenStream::new();
-    for field in fields.named.iter() {
+    for field in fields.named.iter_mut() {
         let name = field.ident.as_ref().unwrap().unraw().to_string();
         column_names.push(name.clone());
 
@@ -32,6 +34,22 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
 
         if name == "id" {
             id_type = Some(ty);
+        }
+
+        let mut attr = None;
+        field.attrs.retain(|a| {
+            let meta = a.parse_meta().ok();
+            match meta.and_then(|meta| FieldAttribute::from_meta(&meta).ok()) {
+                Some(a) => {
+                    attr = Some(a);
+                    false
+                }
+                None => true,
+            }
+        });
+
+        if let Some(FieldAttribute { primary_key: true }) = attr {
+            pkey = Some((&field.ident, ty));
         }
 
         if ty.path.segments.last().unwrap().ident == "PrimaryKey" {
@@ -91,7 +109,31 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
         ast.generics.split_for_impl()
     };
 
-    let pkey_ty = if let Some(ty) = id_type {
+    let pkey_ty = if let Some((name, ty)) = pkey {
+        let cname = format!("{}_pkey", table_name);
+        let name = format!("{}", name.as_ref().unwrap());
+        constraints.extend(quote!(
+            mendes::models::Constraint::PrimaryKey {
+                name: #cname.into(),
+                columns: vec![#name.into()],
+            },
+        ));
+
+        let segment = ty.path.segments.last().unwrap();
+        let pkey_ty = if segment.ident == "Serial" {
+            match &segment.arguments {
+                syn::PathArguments::AngleBracketed(args) => match args.args.first() {
+                    Some(syn::GenericArgument::Type(syn::Type::Path(ty))) => Some(ty),
+                    _ => panic!("unsupported Serial argument type"),
+                },
+                _ => panic!("unsupported Serial argument type"),
+            }
+        } else {
+            Some(ty)
+        };
+        bounds.insert(quote!(#pkey_ty: mendes::models::ModelType<Sys>).to_string());
+        pkey_ty
+    } else if let Some(ty) = id_type {
         let cname = format!("{}_pkey", table_name);
         constraints.extend(quote!(
             mendes::models::Constraint::PrimaryKey {
@@ -175,6 +217,12 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
     );
 
     impls
+}
+
+#[derive(Debug, FromMeta)]
+struct FieldAttribute {
+    #[darling(default)]
+    primary_key: bool,
 }
 
 pub fn model_type(ast: &mut syn::Item) -> proc_macro2::TokenStream {
