@@ -25,8 +25,8 @@ fn test_model() {
         "CREATE TABLE dependent (\
              id serial NOT NULL, \
              named integer NOT NULL, \
-             CONSTRAINT dependent_pkey PRIMARY KEY (id), \
-             CONSTRAINT named FOREIGN KEY (named) REFERENCES named (id)\
+             CONSTRAINT named FOREIGN KEY (named) REFERENCES named (id), \
+             CONSTRAINT dependent_pkey PRIMARY KEY (id)\
          )"
     )
 }
