@@ -15,24 +15,15 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
     let name = &ast.ident;
     let table_name = name.to_string().to_lowercase();
 
-    let mut pkey_ty = None;
+    let mut id_type = None;
     let mut bounds = HashSet::new();
     let mut columns = proc_macro2::TokenStream::new();
     let mut constraints = proc_macro2::TokenStream::new();
     let mut column_names = Vec::with_capacity(fields.named.len());
     let mut params = proc_macro2::TokenStream::new();
-    for field in fields.named.iter_mut() {
+    for field in fields.named.iter() {
         let name = field.ident.as_ref().unwrap().unraw().to_string();
         column_names.push(name.clone());
-        if name == "id" {
-            let cname = format!("{}_pkey", table_name);
-            constraints.extend(quote!(
-                mendes::models::Constraint::PrimaryKey {
-                    name: #cname.into(),
-                    columns: vec!["id".into()],
-                },
-            ));
-        }
 
         let ty = match &field.ty {
             syn::Type::Path(ty) => ty,
@@ -40,19 +31,7 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
         };
 
         if name == "id" {
-            let segment = ty.path.segments.last().unwrap();
-            pkey_ty = if segment.ident == "Serial" {
-                match &segment.arguments {
-                    syn::PathArguments::AngleBracketed(args) => match args.args.first() {
-                        Some(syn::GenericArgument::Type(syn::Type::Path(ty))) => Some(ty),
-                        _ => panic!("unsupported Serial argument type"),
-                    },
-                    _ => panic!("unsupported Serial argument type"),
-                }
-            } else {
-                Some(ty)
-            };
-            bounds.insert(quote!(#pkey_ty: mendes::models::ModelType<Sys>).to_string());
+            id_type = Some(ty);
         }
 
         if ty.path.segments.last().unwrap().ident == "PrimaryKey" {
@@ -110,6 +89,33 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
         (impl_generics, type_generics, where_clause)
     } else {
         ast.generics.split_for_impl()
+    };
+
+    let pkey_ty = if let Some(ty) = id_type {
+        let cname = format!("{}_pkey", table_name);
+        constraints.extend(quote!(
+            mendes::models::Constraint::PrimaryKey {
+                name: #cname.into(),
+                columns: vec!["id".into()],
+            },
+        ));
+
+        let segment = ty.path.segments.last().unwrap();
+        let pkey_ty = if segment.ident == "Serial" {
+            match &segment.arguments {
+                syn::PathArguments::AngleBracketed(args) => match args.args.first() {
+                    Some(syn::GenericArgument::Type(syn::Type::Path(ty))) => Some(ty),
+                    _ => panic!("unsupported Serial argument type"),
+                },
+                _ => panic!("unsupported Serial argument type"),
+            }
+        } else {
+            Some(ty)
+        };
+        bounds.insert(quote!(#pkey_ty: mendes::models::ModelType<Sys>).to_string());
+        pkey_ty
+    } else {
+        panic!("no primary key found for type {:?}", name);
     };
 
     let bounds = bounds.iter().enumerate().fold(
