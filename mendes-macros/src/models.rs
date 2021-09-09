@@ -23,16 +23,18 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
     let mut constraints = proc_macro2::TokenStream::new();
     let mut column_names = Vec::with_capacity(fields.named.len());
     let mut params = proc_macro2::TokenStream::new();
+    let mut expr_type_fields = proc_macro2::TokenStream::new();
+    let mut expr_instance_fields = proc_macro2::TokenStream::new();
     for field in fields.named.iter_mut() {
-        let name = field.ident.as_ref().unwrap().unraw().to_string();
-        column_names.push(name.clone());
+        let col_name = field.ident.as_ref().unwrap().unraw().to_string();
+        column_names.push(col_name.clone());
 
         let ty = match &field.ty {
             syn::Type::Path(ty) => ty,
             _ => panic!("unsupported type"),
         };
 
-        if name == "id" {
+        if col_name == "id" {
             id_type = Some(ty);
         }
 
@@ -62,8 +64,8 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
             last.ident = syn::Ident::new("PRIMARY_KEY_COLUMNS", Span::call_site());
             constraints.extend(quote!(
                 mendes::models::Constraint::ForeignKey {
-                    name: #name.into(),
-                    columns: ::std::borrow::Cow::Borrowed(&[::std::borrow::Cow::Borrowed(#name)]),
+                    name: #col_name.into(),
+                    columns: ::std::borrow::Cow::Borrowed(&[::std::borrow::Cow::Borrowed(#col_name)]),
                     ref_table: #ref_table.into(),
                     ref_columns: ::std::borrow::Cow::Borrowed(#ref_columns),
                 },
@@ -72,11 +74,18 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
 
         bounds.insert(quote!(#ty: mendes::models::ModelType<Sys>).to_string());
         columns.extend(quote!(
-            <#ty as mendes::models::ModelType<Sys>>::to_column(#name.into(), &[]),
+            <#ty as mendes::models::ModelType<Sys>>::to_column(#col_name.into(), &[]),
         ));
 
         let field_name = field.ident.as_ref().unwrap();
         params.extend(quote!(<#ty as mendes::models::ModelType<Sys>>::value(&self.#field_name), ));
+
+        expr_type_fields.extend(quote!(#field_name: ::mendes::models::ColumnExpr<#name, #ty>,));
+        expr_instance_fields.extend(quote!(#field_name: ::mendes::models::ColumnExpr {
+            table: ::std::marker::PhantomData,
+            ty: ::std::marker::PhantomData,
+            name: #col_name,
+        },));
     }
 
     let system = ast.generics.params.iter().any(|param| {
@@ -191,14 +200,21 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
         placeholders
     );
 
+    let expr_type_name = syn::Ident::new(&format!("{}Expression", name), Span::call_site());
     let orig_impl_generics = ast.generics.split_for_impl().0;
     let impls = quote!(
         impl#orig_impl_generics mendes::models::ModelMeta for #name#type_generics #where_clause {
             type PrimaryKey = #pkey_ty;
+            type Expression = #expr_type_name;
+
             const TABLE_NAME: &'static str = #table_name;
             const PRIMARY_KEY_COLUMNS: &'static [::std::borrow::Cow<'static, str>] = &[
                 ::std::borrow::Cow::Borrowed("id"),
             ];
+            const EXPRESSION: &'static #expr_type_name = &#expr_type_name {
+                #expr_instance_fields
+            };
+
         }
 
         impl#impl_generics mendes::models::Model<Sys> for #name#type_generics #where_clause #bounds {
@@ -214,6 +230,8 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
                 (#insert, vec![#params])
             }
         }
+
+        struct #expr_type_name { #expr_type_fields }
     );
 
     impls
