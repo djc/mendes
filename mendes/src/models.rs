@@ -132,12 +132,43 @@ pub trait Model<Sys: System>: ModelMeta {
     fn table() -> Table;
     // TODO: don't use a Vec for this (needs const generics?)
     fn insert(&self) -> (&str, Vec<&Sys::Parameter>);
+
+    fn query() -> QueryBuilder<Sys, Sources<Self>> {
+        QueryBuilder {
+            sys: PhantomData,
+            state: Sources(PhantomData),
+        }
+    }
+}
+
+pub struct QueryBuilder<Sys: System, State: QueryState> {
+    sys: PhantomData<Sys>,
+    state: State,
+}
+
+pub struct Sources<T: Source + ?Sized>(PhantomData<T>);
+
+impl<T: Source + ?Sized> QueryState for Sources<T> {}
+
+impl<T: ModelMeta + ?Sized> Source for T {}
+
+pub trait QueryState {}
+
+pub trait Source {}
+
+pub struct ColumnExpr<Table: ModelMeta, Type> {
+    pub table: PhantomData<Table>,
+    pub ty: PhantomData<Type>,
+    pub name: &'static str,
 }
 
 pub trait ModelMeta {
     type PrimaryKey;
+    type Expression: 'static;
+
     const TABLE_NAME: &'static str;
     const PRIMARY_KEY_COLUMNS: &'static [Cow<'static, str>];
+    const EXPRESSION: &'static Self::Expression;
 }
 
 pub trait ModelType<Sys: System> {
