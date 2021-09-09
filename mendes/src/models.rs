@@ -146,15 +146,50 @@ pub struct QueryBuilder<Sys: System, State: QueryState> {
     state: State,
 }
 
+impl<Sys: System, T: Source> QueryBuilder<Sys, Sources<T>> {
+    pub fn sort<F, S: SortStrategy>(self, f: F) -> QueryBuilder<Sys, Sorted<T, S>>
+    where
+        F: FnOnce(&'static T::Expression) -> S,
+    {
+        QueryBuilder {
+            sys: PhantomData,
+            state: Sorted {
+                source: self.state.0,
+                sort: f(T::expr()),
+            },
+        }
+    }
+}
+
+pub struct Sorted<T: Source + ?Sized, S: SortStrategy> {
+    source: PhantomData<T>,
+    #[allow(dead_code)]
+    sort: S,
+}
+
+impl<T: Source + ?Sized, S: SortStrategy> QueryState for Sorted<T, S> {}
+
+pub trait SortStrategy {}
+
 pub struct Sources<T: Source + ?Sized>(PhantomData<T>);
 
 impl<T: Source + ?Sized> QueryState for Sources<T> {}
 
-impl<T: ModelMeta + ?Sized> Source for T {}
+impl<T: ModelMeta + ?Sized> Source for T {
+    type Expression = T::Expression;
+
+    fn expr() -> &'static Self::Expression {
+        Self::EXPRESSION
+    }
+}
 
 pub trait QueryState {}
 
-pub trait Source {}
+pub trait Source {
+    type Expression: 'static;
+
+    fn expr() -> &'static Self::Expression;
+}
 
 pub struct ColumnExpr<Table: ModelMeta, Type> {
     pub table: PhantomData<Table>,
