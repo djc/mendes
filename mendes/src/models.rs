@@ -136,50 +136,125 @@ pub trait Model<Sys: System>: ModelMeta {
     fn query() -> QueryBuilder<Sys, Sources<Self>> {
         QueryBuilder {
             sys: PhantomData,
-            state: Sources(PhantomData),
+            source: Sources(PhantomData),
         }
     }
 }
 
-pub struct QueryBuilder<Sys: System, State: QueryState> {
+pub struct QueryBuilder<Sys: System, S: Source> {
     sys: PhantomData<Sys>,
-    state: State,
+    #[allow(dead_code)]
+    source: S,
 }
 
-impl<Sys: System, T: Source> QueryBuilder<Sys, Sources<T>> {
-    pub fn sort<F, S: SortStrategy>(self, f: F) -> QueryBuilder<Sys, Sorted<T, S>>
+impl<Sys: System, S: Source> QueryBuilder<Sys, S> {
+    // TODO: rename according to std::slice naming (`sort_by_key`?)
+    pub fn sort<F, SK: SortKey>(self, f: F) -> QueryBuilder<Sys, Sorted<S, SK>>
     where
-        F: FnOnce(&'static T::Expression) -> S,
+        F: FnOnce(&'static S::Expression) -> SK,
     {
         QueryBuilder {
             sys: PhantomData,
-            state: Sorted {
-                source: self.state.0,
-                sort: f(T::expr()),
+            source: Sorted {
+                source: self.source,
+                sort_key: f(S::expr()),
             },
         }
     }
 }
 
-pub struct Sorted<T: Source + ?Sized, S: SortStrategy> {
-    source: PhantomData<T>,
-    #[allow(dead_code)]
-    sort: S,
+impl<Sys: System, S: Source> QueryBuilder<Sys, S> {
+    pub fn limit(self, limit: u64) -> QueryBuilder<Sys, Paginated<S>> {
+        QueryBuilder {
+            sys: PhantomData,
+            source: Paginated {
+                source: self.source,
+                limit,
+            },
+        }
+    }
 }
 
-impl<T: Source + ?Sized, S: SortStrategy> QueryState for Sorted<T, S> {}
+impl<Sys: System, S: Source> QueryBuilder<Sys, S> {
+    pub fn select<F, V>(self, f: F) -> Query<Sys, S, V>
+    where
+        F: FnOnce(&'static S::Expression) -> V,
+        V: Values<Sys>,
+    {
+        Query {
+            sys: PhantomData,
+            source: self.source,
+            fields: f(S::expr()),
+        }
+    }
+}
 
-pub trait SortStrategy {}
+pub struct Query<Sys: System, S: Source, V: Values<Sys>> {
+    sys: PhantomData<Sys>,
+    #[allow(dead_code)]
+    source: S,
+    #[allow(dead_code)]
+    fields: V,
+}
 
-pub struct Sources<T: Source + ?Sized>(PhantomData<T>);
+impl<Sys: System, S: Source, V: Values<Sys>> fmt::Display for Query<Sys, S, V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SELECT ")?;
+        self.fields.fmt(f)?;
+        f.write_str(" ")?;
+        self.source.fmt(f)
+    }
+}
 
-impl<T: Source + ?Sized> QueryState for Sources<T> {}
+pub struct Paginated<S: Source> {
+    source: S,
+    #[allow(dead_code)]
+    limit: u64,
+}
 
-impl<T: ModelMeta + ?Sized> Source for T {
-    type Expression = T::Expression;
+impl<S: Source> Source for Paginated<S> {
+    type Expression = S::Expression;
 
     fn expr() -> &'static Self::Expression {
-        Self::EXPRESSION
+        S::expr()
+    }
+
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.source.fmt(fmt)?;
+        fmt.write_fmt(format_args!(" LIMIT {}", self.limit))
+    }
+}
+
+pub struct Sorted<S: Source, SK: SortKey> {
+    source: S,
+    #[allow(dead_code)]
+    sort_key: SK,
+}
+
+impl<T: Source, S: SortKey> QueryState for Sorted<T, S> {}
+
+impl<S: Source, SK: SortKey> Source for Sorted<S, SK> {
+    type Expression = S::Expression;
+
+    fn expr() -> &'static Self::Expression {
+        S::expr()
+    }
+
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.source.fmt(fmt)?;
+        fmt.write_str(" ORDER BY ")?;
+        self.sort_key.fmt(fmt)
+    }
+}
+
+pub trait SortKey {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result;
+}
+
+#[cfg(feature = "chrono")]
+impl<Sys: System, M: Model<Sys>> SortKey for ColumnExpr<Sys, M, chrono::DateTime<chrono::Utc>> {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt(fmt)
     }
 }
 
@@ -189,12 +264,68 @@ pub trait Source {
     type Expression: 'static;
 
     fn expr() -> &'static Self::Expression;
+
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result;
 }
 
-pub struct ColumnExpr<Table: ModelMeta, Type> {
-    pub table: PhantomData<Table>,
+pub struct ColumnExpr<Sys: System, M: Model<Sys>, Type> {
+    sys: PhantomData<Sys>,
+    pub table: PhantomData<M>,
     pub ty: PhantomData<Type>,
     pub name: &'static str,
+}
+
+impl<Sys: System, M: Model<Sys>, Type> ColumnExpr<Sys, M, Type> {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt.write_fmt(format_args!("{}.{}", M::TABLE_NAME, self.name))
+    }
+}
+
+impl<Sys: System, M: Model<Sys>, Type> Clone for ColumnExpr<Sys, M, Type> {
+    fn clone(&self) -> Self {
+        Self {
+            sys: self.sys,
+            table: self.table,
+            ty: self.ty,
+            name: self.name,
+        }
+    }
+}
+
+impl<Sys: System, M: Model<Sys>, Type> Copy for ColumnExpr<Sys, M, Type> {}
+
+impl<Sys: System, M: Model<Sys>, Type> Values<Sys> for ColumnExpr<Sys, M, Type> {
+    type Output = Type;
+
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt(fmt)
+    }
+
+    fn build(row: Sys::Row) -> Result<Self::Output, Sys::Error> {
+
+    }
+}
+
+pub struct Sources<M: ModelMeta + ?Sized>(PhantomData<M>);
+
+impl<M: ModelMeta + ?Sized> Source for Sources<M> {
+    type Expression = M::Expression;
+
+    fn expr() -> &'static Self::Expression {
+        M::EXPRESSION
+    }
+
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt.write_fmt(format_args!("FROM {}", M::TABLE_NAME))
+    }
+}
+
+pub trait Values<Sys: System> {
+    type Output: Sized;
+
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result;
+
+    fn build(row: Sys::Row) -> Result<Self::Output, Sys::Error>;
 }
 
 pub trait ModelMeta {
@@ -216,6 +347,8 @@ pub trait ModelType<Sys: System> {
 pub trait System: Sized {
     type Parameter: ?Sized;
     type StatementReturn;
+    type Row;
+    type Error;
 
     fn table<M: Model<Self>>() -> Table {
         M::table()
