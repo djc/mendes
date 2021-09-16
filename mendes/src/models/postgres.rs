@@ -2,18 +2,21 @@
 
 use std::borrow::Cow;
 use std::error::Error as StdError;
+use std::ops::Deref;
 
 use bytes::BytesMut;
-
-use super::{Column, EnumType, Model, ModelType, Serial, System};
-
 pub use postgres_types as types;
+pub use tokio_postgres::Error;
+
+use super::{Column, EnumType, Model, ModelType, Query, Serial, Source, System, Values};
 
 pub struct PostgreSql;
 
 impl System for PostgreSql {
     type Parameter = Parameter;
     type StatementReturn = Result<u64, tokio_postgres::Error>;
+    type Row = tokio_postgres::Row;
+    type Error = Error;
 }
 
 impl<T> types::ToSql for Serial<T>
@@ -258,15 +261,39 @@ where
     }
 }
 
-pub struct Client(pub tokio_postgres::Client);
+pub struct Client<C: Deref<Target = tokio_postgres::Client>>(C);
 
-impl Client {
+impl<C: Deref<Target = tokio_postgres::Client>> Client<C> {
+    pub fn new(inner: C) -> Self {
+        Self(inner)
+    }
+
+    pub async fn query_one<S: Source, V: Values<PostgreSql>>(
+        &self,
+        query: Query<PostgreSql, S, V>,
+    ) -> Result<V, Error> {
+    }
+
     pub async fn insert<M: Model<PostgreSql>>(
         &self,
         data: &M,
     ) -> Result<u64, tokio_postgres::Error> {
         let (statement, params) = data.insert();
         self.0.execute(statement, &params).await
+    }
+
+    pub async fn exists<M: Model<PostgreSql>>(&self) -> Result<bool, Error> {
+        self.0
+            .query_one(
+                "SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name = $1
+        )",
+                &[&M::TABLE_NAME],
+            )
+            .map(|result| result.map(|row| row.get(0)))
+            .await
     }
 }
 

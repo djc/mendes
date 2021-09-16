@@ -14,6 +14,7 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
     };
 
     let name = &ast.ident;
+    let visibility = &ast.vis;
     let table_name = name.to_string().to_lowercase();
 
     let mut id_type = None;
@@ -80,7 +81,9 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
         let field_name = field.ident.as_ref().unwrap();
         params.extend(quote!(<#ty as mendes::models::ModelType<Sys>>::value(&self.#field_name), ));
 
-        expr_type_fields.extend(quote!(#field_name: ::mendes::models::ColumnExpr<#name, #ty>,));
+        expr_type_fields.extend(quote!(
+            #visibility #field_name: ::mendes::models::ColumnExpr<#name, #ty>,
+        ));
         expr_instance_fields.extend(quote!(#field_name: ::mendes::models::ColumnExpr {
             table: ::std::marker::PhantomData,
             ty: ::std::marker::PhantomData,
@@ -231,7 +234,7 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
             }
         }
 
-        struct #expr_type_name { #expr_type_fields }
+        #visibility struct #expr_type_name { #expr_type_fields }
     );
 
     impls
