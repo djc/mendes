@@ -252,7 +252,7 @@ pub trait SortKey {
 }
 
 #[cfg(feature = "chrono")]
-impl<Sys: System, M: Model<Sys>> SortKey for ColumnExpr<Sys, M, chrono::DateTime<chrono::Utc>> {
+impl<M: ModelMeta> SortKey for ColumnExpr<M, chrono::DateTime<chrono::Utc>> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.fmt(fmt)
     }
@@ -268,23 +268,21 @@ pub trait Source {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result;
 }
 
-pub struct ColumnExpr<Sys: System, M: Model<Sys>, Type> {
-    sys: PhantomData<Sys>,
+pub struct ColumnExpr<M: ModelMeta, Type> {
     pub table: PhantomData<M>,
     pub ty: PhantomData<Type>,
     pub name: &'static str,
 }
 
-impl<Sys: System, M: Model<Sys>, Type> ColumnExpr<Sys, M, Type> {
+impl<M: ModelMeta, Type> ColumnExpr<M, Type> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.write_fmt(format_args!("{}.{}", M::TABLE_NAME, self.name))
     }
 }
 
-impl<Sys: System, M: Model<Sys>, Type> Clone for ColumnExpr<Sys, M, Type> {
+impl<M: ModelMeta, Type> Clone for ColumnExpr<M, Type> {
     fn clone(&self) -> Self {
         Self {
-            sys: self.sys,
             table: self.table,
             ty: self.ty,
             name: self.name,
@@ -292,19 +290,7 @@ impl<Sys: System, M: Model<Sys>, Type> Clone for ColumnExpr<Sys, M, Type> {
     }
 }
 
-impl<Sys: System, M: Model<Sys>, Type> Copy for ColumnExpr<Sys, M, Type> {}
-
-impl<Sys: System, M: Model<Sys>, Type> Values<Sys> for ColumnExpr<Sys, M, Type> {
-    type Output = Type;
-
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.fmt(fmt)
-    }
-
-    fn build(row: Sys::Row) -> Result<Self::Output, Sys::Error> {
-
-    }
-}
+impl<M: ModelMeta, Type> Copy for ColumnExpr<M, Type> {}
 
 pub struct Sources<M: ModelMeta + ?Sized>(PhantomData<M>);
 

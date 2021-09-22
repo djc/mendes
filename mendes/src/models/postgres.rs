@@ -2,13 +2,31 @@
 
 use std::borrow::Cow;
 use std::error::Error as StdError;
+use std::fmt;
 use std::ops::Deref;
 
 use bytes::BytesMut;
+use futures_util::FutureExt;
 pub use postgres_types as types;
-pub use tokio_postgres::Error;
+pub use tokio_postgres::{Error, Row};
+use types::{FromSql, ToSql};
 
-use super::{Column, EnumType, Model, ModelType, Query, Serial, Source, System, Values};
+use super::{
+    Column, ColumnExpr, EnumType, Model, ModelMeta, ModelType, Query, Serial, Source, System,
+    Values,
+};
+
+impl<M: ModelMeta, Type: for<'a> FromSql<'a>> Values<PostgreSql> for ColumnExpr<M, Type> {
+    type Output = Type;
+
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt(fmt)
+    }
+
+    fn build(row: Row) -> Result<Self::Output, Error> {
+        row.try_get(0)
+    }
+}
 
 pub struct PostgreSql;
 
