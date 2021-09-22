@@ -23,7 +23,7 @@ impl fmt::Display for Table {
         for col in self.columns.iter() {
             if let Some(def) = &col.type_def {
                 if defined.insert(&col.ty) {
-                    write!(fmt, "{}; ", def)?;
+                    write!(fmt, "{};\n\n", def)?;
                 }
             }
         }
@@ -31,14 +31,14 @@ impl fmt::Display for Table {
         write!(fmt, "CREATE TABLE \"{}\" (", self.name)?;
         for (i, col) in self.columns.iter().enumerate() {
             if i > 0 {
-                write!(fmt, ", ")?;
+                write!(fmt, ",")?;
             }
-            write!(fmt, "{}", col)?;
+            write!(fmt, "\n    {}", col)?;
         }
         for constraint in self.constraints.iter() {
-            write!(fmt, ", {}", constraint)?;
+            write!(fmt, ",\n    {}", constraint)?;
         }
-        write!(fmt, ")")
+        write!(fmt, "\n)")
     }
 }
 
