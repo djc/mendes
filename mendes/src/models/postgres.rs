@@ -264,14 +264,15 @@ where
 pub struct Client<C: Deref<Target = tokio_postgres::Client>>(C);
 
 impl<C: Deref<Target = tokio_postgres::Client>> Client<C> {
-    pub fn new(inner: C) -> Self {
-        Self(inner)
-    }
-
     pub async fn query_one<S: Source, V: Values<PostgreSql>>(
         &self,
         query: Query<PostgreSql, S, V>,
-    ) -> Result<V, Error> {
+        params: &[&(dyn ToSql + Sync)],
+    ) -> Result<V::Output, Error> {
+        self.0
+            .query_one(query.to_string().as_str(), params)
+            .map(|result| result.and_then(V::build))
+            .await
     }
 
     pub async fn insert<M: Model<PostgreSql>>(
@@ -294,6 +295,20 @@ impl<C: Deref<Target = tokio_postgres::Client>> Client<C> {
             )
             .map(|result| result.map(|row| row.get(0)))
             .await
+    }
+}
+
+impl<C: Deref<Target = tokio_postgres::Client>> Deref for Client<C> {
+    type Target = tokio_postgres::Client;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<C: Deref<Target = tokio_postgres::Client>> From<C> for Client<C> {
+    fn from(inner: C) -> Self {
+        Client(inner)
     }
 }
 
