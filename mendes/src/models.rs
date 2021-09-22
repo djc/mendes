@@ -28,7 +28,7 @@ impl fmt::Display for Table {
             }
         }
 
-        write!(fmt, "CREATE TABLE {} (", self.name)?;
+        write!(fmt, "CREATE TABLE \"{}\" (", self.name)?;
         for (i, col) in self.columns.iter().enumerate() {
             if i > 0 {
                 write!(fmt, ", ")?;
@@ -53,7 +53,7 @@ pub struct Column {
 
 impl fmt::Display for Column {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(fmt, "{} {}", self.name, self.ty)?;
+        write!(fmt, "\"{}\" {}", self.name, self.ty)?;
         if !self.null {
             write!(fmt, " NOT NULL")?;
         }
@@ -84,29 +84,29 @@ impl fmt::Display for Constraint {
                 ref_table,
                 ref_columns,
             } => {
-                write!(fmt, "CONSTRAINT {} FOREIGN KEY (", name)?;
+                write!(fmt, "CONSTRAINT \"{}\" FOREIGN KEY (", name)?;
                 for (i, col) in columns.iter().enumerate() {
                     if i > 0 {
                         write!(fmt, ", ")?;
                     }
-                    write!(fmt, "{}", col)?;
+                    write!(fmt, "\"{}\"", col)?;
                 }
-                write!(fmt, ") REFERENCES {} (", ref_table)?;
+                write!(fmt, ") REFERENCES \"{}\" (", ref_table)?;
                 for (i, col) in ref_columns.iter().enumerate() {
                     if i > 0 {
                         write!(fmt, ", ")?;
                     }
-                    write!(fmt, "{}", col)?;
+                    write!(fmt, "\"{}\"", col)?;
                 }
                 write!(fmt, ")")
             }
             Constraint::PrimaryKey { name, columns } => {
-                write!(fmt, "CONSTRAINT {} PRIMARY KEY (", name)?;
+                write!(fmt, "CONSTRAINT \"{}\" PRIMARY KEY (", name)?;
                 for (i, col) in columns.iter().enumerate() {
                     if i > 0 {
                         write!(fmt, ", ")?;
                     }
-                    write!(fmt, "{}", col)?;
+                    write!(fmt, "\"{}\"", col)?;
                 }
                 write!(fmt, ")")
             }
