@@ -15,6 +15,7 @@ CREATE TABLE "named" (
     "id" serial NOT NULL,
     "name" text NOT NULL,
     "num" bigint NOT NULL,
+    "maybe" boolean,
     "foo" "Foo" NOT NULL,
     "wrap" integer NOT NULL,
     CONSTRAINT "named_pkey" PRIMARY KEY ("id")
@@ -38,6 +39,7 @@ struct Named {
     id: Serial<i32>,
     name: String,
     num: i64,
+    maybe: Option<bool>,
     foo: Foo,
     wrap: Wrap,
 }

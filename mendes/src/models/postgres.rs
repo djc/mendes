@@ -86,6 +86,18 @@ where
     }
 }
 
+impl<T: ModelType<PostgreSql> + types::ToSql + Sync + 'static> ModelType<PostgreSql> for Option<T> {
+    fn value(&self) -> &Parameter {
+        self
+    }
+
+    fn to_column(name: Cow<'static, str>, params: &[(&str, &str)]) -> Column {
+        let mut column = T::to_column(name, params);
+        column.null = true;
+        column
+    }
+}
+
 impl ModelType<PostgreSql> for bool
 where
     Self: types::ToSql,
