@@ -12,8 +12,8 @@ pub use tokio_postgres::{Error, Row};
 use types::{FromSql, ToSql};
 
 use super::{
-    Column, ColumnExpr, EnumType, Model, ModelMeta, ModelType, Query, Serial, Source, System,
-    Values,
+    Column, ColumnExpr, Defaulted, EnumType, Model, ModelMeta, ModelType, Query, Serial, Source,
+    System, Values,
 };
 
 impl<M: ModelMeta, Type: for<'a> FromSql<'a>> Values<PostgreSql> for ColumnExpr<M, Type> {
@@ -62,7 +62,7 @@ where
         self
     }
 
-    fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
+    fn to_column(name: Cow<'static, str>, params: &[(&str, &'static str)]) -> Column {
         let ty_name = T::NAME;
 
         let variants = T::VARIANTS;
@@ -76,13 +76,57 @@ where
             }
         }
 
+        let mut default = None;
+        for (key, val) in params {
+            if *key == "default" {
+                default = Some(Cow::from(*val));
+            }
+        }
+
         Column {
             name,
             ty: format!("\"{}\"", ty_name).into(),
             null: false,
-            default: None,
+            default,
             type_def: Some(format!("CREATE TYPE \"{}\" AS ENUM({})", ty_name, variant_str).into()),
         }
+    }
+}
+
+impl<T: types::ToSql> types::ToSql for Defaulted<T> {
+    fn to_sql(
+        &self,
+        ty: &types::Type,
+        out: &mut BytesMut,
+    ) -> Result<types::IsNull, Box<dyn StdError + Sync + Send>>
+    where
+        Self: Sized,
+    {
+        match self {
+            Self::Value(val) => val.to_sql(ty, out),
+            Self::Default => "DEFAULT".to_sql(ty, out),
+        }
+    }
+
+    fn accepts(ty: &types::Type) -> bool
+    where
+        Self: Sized,
+    {
+        T::accepts(ty)
+    }
+
+    types::to_sql_checked!();
+}
+
+impl<T: ModelType<PostgreSql> + types::ToSql + Sync + 'static> ModelType<PostgreSql>
+    for Defaulted<T>
+{
+    fn value(&self) -> &Parameter {
+        self
+    }
+
+    fn to_column(_: Cow<'static, str>, _: &[(&str, &'static str)]) -> Column {
+        unreachable!()
     }
 }
 
@@ -91,7 +135,7 @@ impl<T: ModelType<PostgreSql> + types::ToSql + Sync + 'static> ModelType<Postgre
         self
     }
 
-    fn to_column(name: Cow<'static, str>, params: &[(&str, &str)]) -> Column {
+    fn to_column(name: Cow<'static, str>, params: &[(&str, &'static str)]) -> Column {
         let mut column = T::to_column(name, params);
         column.null = true;
         column
@@ -106,12 +150,19 @@ where
         self
     }
 
-    fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
+    fn to_column(name: Cow<'static, str>, params: &[(&str, &'static str)]) -> Column {
+        let mut default = None;
+        for (key, val) in params {
+            if *key == "default" {
+                default = Some(Cow::from(*val));
+            }
+        }
+
         Column {
             name,
             ty: "boolean".into(),
             null: false,
-            default: None,
+            default,
             type_def: None,
         }
     }
@@ -125,12 +176,19 @@ where
         self
     }
 
-    fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
+    fn to_column(name: Cow<'static, str>, params: &[(&str, &'static str)]) -> Column {
+        let mut default = None;
+        for (key, val) in params {
+            if *key == "default" {
+                default = Some(Cow::from(*val));
+            }
+        }
+
         Column {
             name,
             ty: "serial".into(),
             null: false,
-            default: None,
+            default,
             type_def: None,
         }
     }
@@ -144,12 +202,19 @@ where
         self
     }
 
-    fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
+    fn to_column(name: Cow<'static, str>, params: &[(&str, &'static str)]) -> Column {
+        let mut default = None;
+        for (key, val) in params {
+            if *key == "default" {
+                default = Some(Cow::from(*val));
+            }
+        }
+
         Column {
             name,
             ty: "integer".into(),
             null: false,
-            default: None,
+            default,
             type_def: None,
         }
     }
@@ -163,12 +228,19 @@ where
         self
     }
 
-    fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
+    fn to_column(name: Cow<'static, str>, params: &[(&str, &'static str)]) -> Column {
+        let mut default = None;
+        for (key, val) in params {
+            if *key == "default" {
+                default = Some(Cow::from(*val));
+            }
+        }
+
         Column {
             name,
             ty: "bigint".into(),
             null: false,
-            default: None,
+            default,
             type_def: None,
         }
     }
@@ -182,12 +254,19 @@ where
         self
     }
 
-    fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
+    fn to_column(name: Cow<'static, str>, params: &[(&str, &'static str)]) -> Column {
+        let mut default = None;
+        for (key, val) in params {
+            if *key == "default" {
+                default = Some(Cow::from(*val));
+            }
+        }
+
         Column {
             name,
             ty: "bigserial".into(),
             null: false,
-            default: None,
+            default,
             type_def: None,
         }
     }
@@ -201,12 +280,19 @@ where
         self
     }
 
-    fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
+    fn to_column(name: Cow<'static, str>, params: &[(&str, &'static str)]) -> Column {
+        let mut default = None;
+        for (key, val) in params {
+            if *key == "default" {
+                default = Some(Cow::from(*val));
+            }
+        }
+
         Column {
             name,
             ty: "bytea".into(),
             null: false,
-            default: None,
+            default,
             type_def: None,
         }
     }
@@ -220,12 +306,19 @@ where
         self
     }
 
-    fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
+    fn to_column(name: Cow<'static, str>, params: &[(&str, &'static str)]) -> Column {
+        let mut default = None;
+        for (key, val) in params {
+            if *key == "default" {
+                default = Some(Cow::from(*val));
+            }
+        }
+
         Column {
             name,
             ty: "text".into(),
             null: false,
-            default: None,
+            default,
             type_def: None,
         }
     }
@@ -240,12 +333,19 @@ where
         self
     }
 
-    fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
+    fn to_column(name: Cow<'static, str>, params: &[(&str, &'static str)]) -> Column {
+        let mut default = None;
+        for (key, val) in params {
+            if *key == "default" {
+                default = Some(Cow::from(*val));
+            }
+        }
+
         Column {
             name,
             ty: "date".into(),
             null: false,
-            default: None,
+            default,
             type_def: None,
         }
     }
@@ -260,12 +360,19 @@ where
         self
     }
 
-    fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
+    fn to_column(name: Cow<'static, str>, params: &[(&str, &'static str)]) -> Column {
+        let mut default = None;
+        for (key, val) in params {
+            if *key == "default" {
+                default = Some(Cow::from(*val));
+            }
+        }
+
         Column {
             name,
             ty: "timestamp with time zone".into(),
             null: false,
-            default: None,
+            default,
             type_def: None,
         }
     }
@@ -280,12 +387,19 @@ where
         self
     }
 
-    fn to_column(name: Cow<'static, str>, _: &[(&str, &str)]) -> Column {
+    fn to_column(name: Cow<'static, str>, params: &[(&str, &'static str)]) -> Column {
+        let mut default = None;
+        for (key, val) in params {
+            if *key == "default" {
+                default = Some(Cow::from(*val));
+            }
+        }
+
         Column {
             name,
             ty: "timestamp with time zone".into(),
             null: false,
-            default: None,
+            default,
             type_def: None,
         }
     }
@@ -307,9 +421,9 @@ impl<C: Deref<Target = tokio_postgres::Client>> Client<C> {
 
     pub async fn insert<M: Model<PostgreSql>>(
         &self,
-        data: &M,
+        data: &M::Insert,
     ) -> Result<u64, tokio_postgres::Error> {
-        let (statement, params) = data.insert();
+        let (statement, params) = M::insert(data);
         self.0.execute(statement, &params).await
     }
 

@@ -26,6 +26,7 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
     let mut params = proc_macro2::TokenStream::new();
     let mut expr_type_fields = proc_macro2::TokenStream::new();
     let mut expr_instance_fields = proc_macro2::TokenStream::new();
+    let mut insert_type_fields = proc_macro2::TokenStream::new();
     for field in fields.named.iter_mut() {
         let col_name = field.ident.as_ref().unwrap().unraw().to_string();
         column_names.push(col_name.clone());
@@ -51,8 +52,64 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
             }
         });
 
-        if let Some(FieldAttribute { primary_key: true }) = attr {
+        if let Some(FieldAttribute {
+            primary_key: true, ..
+        }) = attr
+        {
             pkey = Some((&field.ident, ty));
+        }
+
+        let field_name = field.ident.as_ref().unwrap();
+        let outer_type_name = &ty.path.segments.last().unwrap().ident;
+        let mut column_params = proc_macro2::TokenStream::new();
+        if let Some(FieldAttribute {
+            default: Some(val), ..
+        }) = attr
+        {
+            if outer_type_name == "Option" {
+                panic!("default values not allowed on Option-typed fields");
+            }
+
+            params.extend(quote!(<#ty as mendes::models::ModelType<Sys>>::value(&new.#field_name.unwrap_or(&#val)), ));
+
+            let str_val = match val {
+                syn::Lit::Str(inner) => {
+                    let value = inner.value();
+                    match value.ends_with(')') {
+                        true => value,
+                        false => format!("'{}'", value),
+                    }
+                }
+                syn::Lit::ByteStr(_) => todo!(),
+                syn::Lit::Byte(_) => todo!(),
+                syn::Lit::Char(_) => todo!(),
+                syn::Lit::Int(inner) => inner.base10_digits().to_string(),
+                syn::Lit::Float(inner) => inner.base10_digits().to_string(),
+                syn::Lit::Bool(inner) => format!("{}", inner.value()),
+                syn::Lit::Verbatim(_) => todo!(),
+            };
+            column_params.extend(quote!(("default", #str_val),));
+            insert_type_fields.extend(quote!(
+                #visibility #field_name: ::mendes::models::Defaulted<#ty>,
+            ));
+            bounds.insert(quote!(
+                ::mendes::models::Defaulted<#ty>: mendes::models::ModelType<Sys>
+            ).to_string());
+        } else if outer_type_name == "Serial" {
+            insert_type_fields.extend(quote!(
+                #visibility #field_name: ::mendes::models::Defaulted<#ty>,
+            ));
+
+            params.extend(quote!(<::mendes::models::Defaulted<#ty> as mendes::models::ModelType<Sys>>::value(&new.#field_name), ));
+            bounds.insert(quote!(
+                ::mendes::models::Defaulted<#ty>: mendes::models::ModelType<Sys>
+            ).to_string());
+        } else {
+            insert_type_fields.extend(quote!(
+                #visibility #field_name: #ty,
+            ));
+            params
+                .extend(quote!(<#ty as mendes::models::ModelType<Sys>>::value(&new.#field_name), ));
         }
 
         if ty.path.segments.last().unwrap().ident == "PrimaryKey" {
@@ -75,11 +132,8 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
 
         bounds.insert(quote!(#ty: mendes::models::ModelType<Sys>).to_string());
         columns.extend(quote!(
-            <#ty as mendes::models::ModelType<Sys>>::to_column(#col_name.into(), &[]),
+            <#ty as mendes::models::ModelType<Sys>>::to_column(#col_name.into(), &[#column_params]),
         ));
-
-        let field_name = field.ident.as_ref().unwrap();
-        params.extend(quote!(<#ty as mendes::models::ModelType<Sys>>::value(&self.#field_name), ));
 
         expr_type_fields.extend(quote!(
             #visibility #field_name: ::mendes::models::ColumnExpr<#name, #ty>,
@@ -203,12 +257,14 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
         placeholders
     );
 
+    let insert_type_name = syn::Ident::new(&format!("{}Insert", name), Span::call_site());
     let expr_type_name = syn::Ident::new(&format!("{}Expression", name), Span::call_site());
     let orig_impl_generics = ast.generics.split_for_impl().0;
     let impls = quote!(
         impl#orig_impl_generics mendes::models::ModelMeta for #name#type_generics #where_clause {
             type PrimaryKey = #pkey_ty;
             type Expression = #expr_type_name;
+            type Insert = #insert_type_name;
 
             const TABLE_NAME: &'static str = #table_name;
             const PRIMARY_KEY_COLUMNS: &'static [::std::borrow::Cow<'static, str>] = &[
@@ -229,12 +285,15 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
                 }
             }
 
-            fn insert(&self) -> (&str, Vec<&Sys::Parameter>) {
+            fn insert(new: &Self::Insert) -> (&str, Vec<&Sys::Parameter>) {
                 (#insert, vec![#params])
             }
         }
 
         #visibility struct #expr_type_name { #expr_type_fields }
+
+        #[allow(dead_code)]
+        #visibility struct #insert_type_name { #insert_type_fields }
     );
 
     impls
@@ -244,6 +303,8 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
 struct FieldAttribute {
     #[darling(default)]
     primary_key: bool,
+    #[darling(default)]
+    default: Option<syn::Lit>,
 }
 
 pub fn model_type(ast: &mut syn::Item) -> proc_macro2::TokenStream {
@@ -292,7 +353,7 @@ fn newtype_type(ty: &syn::ItemStruct) -> proc_macro2::TokenStream {
         {
             fn value(&self) -> &Sys::Parameter { self.0.value() }
 
-            fn to_column(name: std::borrow::Cow<'static, str>, data: &[(&str, &str)]) -> mendes::models::Column {
+            fn to_column(name: std::borrow::Cow<'static, str>, data: &[(&str, &'static str)]) -> mendes::models::Column {
                 #wrapped::to_column(name, data)
             }
         }

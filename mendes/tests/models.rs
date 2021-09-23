@@ -18,6 +18,7 @@ CREATE TABLE "named" (
     "maybe" boolean,
     "foo" "Foo" NOT NULL,
     "wrap" integer NOT NULL,
+    "answer" integer NOT NULL DEFAULT 42,
     CONSTRAINT "named_pkey" PRIMARY KEY ("id")
 )"#
     );
@@ -42,6 +43,8 @@ struct Named {
     maybe: Option<bool>,
     foo: Foo,
     wrap: Wrap,
+    #[model(default = 42)]
+    answer: i32,
 }
 
 #[allow(dead_code)]

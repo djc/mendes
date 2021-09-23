@@ -57,6 +57,9 @@ impl fmt::Display for Column {
         if !self.null {
             write!(fmt, " NOT NULL")?;
         }
+        if let Some(val) = &self.default {
+            write!(fmt, " DEFAULT {}", val)?;
+        }
         Ok(())
     }
 }
@@ -131,7 +134,7 @@ pub trait EnumType {
 pub trait Model<Sys: System>: ModelMeta {
     fn table() -> Table;
     // TODO: don't use a Vec for this (needs const generics?)
-    fn insert(&self) -> (&str, Vec<&Sys::Parameter>);
+    fn insert(new: &Self::Insert) -> (&str, Vec<&Sys::Parameter>);
 
     fn query() -> QueryBuilder<Sys, Sources<Self>> {
         QueryBuilder {
@@ -317,6 +320,7 @@ pub trait Values<Sys: System> {
 pub trait ModelMeta {
     type PrimaryKey;
     type Expression: 'static;
+    type Insert;
 
     const TABLE_NAME: &'static str;
     const PRIMARY_KEY_COLUMNS: &'static [Cow<'static, str>];
@@ -327,7 +331,7 @@ pub trait ModelType<Sys: System> {
     fn value(&self) -> &Sys::Parameter;
 
     #[allow(clippy::wrong_self_convention)]
-    fn to_column(name: Cow<'static, str>, params: &[(&str, &str)]) -> Column;
+    fn to_column(name: Cow<'static, str>, params: &[(&str, &'static str)]) -> Column;
 }
 
 pub trait System: Sized {
@@ -338,6 +342,33 @@ pub trait System: Sized {
 
     fn table<M: Model<Self>>() -> Table {
         M::table()
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum Defaulted<T> {
+    Value(T),
+    Default,
+}
+
+impl<T> Defaulted<T> {
+    pub fn unwrap_or<'a>(&'a self, alt: &'a T) -> &'a T {
+        match self {
+            Self::Value(val) => val,
+            Self::Default => alt,
+        }
+    }
+}
+
+impl<T> Default for Defaulted<T> {
+    fn default() -> Self {
+        Defaulted::Default
+    }
+}
+
+impl<T> From<T> for Defaulted<T> {
+    fn from(val: T) -> Self {
+        Defaulted::Value(val)
     }
 }
 
