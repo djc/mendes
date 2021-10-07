@@ -1,7 +1,7 @@
 #![cfg(all(feature = "models", feature = "postgres"))]
 
 use mendes::models::postgres::{types, PostgreSql};
-use mendes::models::{model, model_type, ModelMeta, Serial, System};
+use mendes::models::{model, model_type, Model, ModelMeta, Serial, System};
 
 #[test]
 fn test_model() {
@@ -20,6 +20,22 @@ CREATE TABLE "named" (
     "wrap" integer NOT NULL,
     "answer" integer NOT NULL DEFAULT 42,
     CONSTRAINT "named_pkey" PRIMARY KEY ("id")
+)"#
+    );
+
+    let new = Named::builder()
+        .name("name".into())
+        .num(12)
+        .maybe(false)
+        .foo(Foo::Bar)
+        .wrap(Wrap(14));
+
+    assert_eq!(
+        Named::insert(&new).0,
+        r#"INSERT INTO "named" (
+    "name", "num", "maybe", "foo", "wrap"
+) VALUES (
+    $1, $2, $3, $4, $5
 )"#
     );
 

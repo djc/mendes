@@ -134,7 +134,9 @@ pub trait EnumType {
 pub trait Model<Sys: System>: ModelMeta {
     fn table() -> Table;
     // TODO: don't use a Vec for this (needs const generics?)
-    fn insert(new: &Self::Insert) -> (&str, Vec<&Sys::Parameter>);
+    fn insert(new: &Self::Insert) -> (String, Vec<&Sys::Parameter>);
+
+    fn builder() -> Self::Builder;
 
     fn query() -> QueryBuilder<Sys, Sources<Self>> {
         QueryBuilder {
@@ -320,6 +322,7 @@ pub trait Values<Sys: System> {
 pub trait ModelMeta {
     type PrimaryKey;
     type Expression: 'static;
+    type Builder;
     type Insert;
 
     const TABLE_NAME: &'static str;

@@ -424,7 +424,7 @@ impl<C: Deref<Target = tokio_postgres::Client>> Client<C> {
         data: &M::Insert,
     ) -> Result<u64, tokio_postgres::Error> {
         let (statement, params) = M::insert(data);
-        self.0.execute(statement, &params).await
+        self.0.execute(&*statement, &params).await
     }
 
     pub async fn exists<M: Model<PostgreSql>>(&self) -> Result<bool, Error> {
