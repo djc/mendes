@@ -23,10 +23,10 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
     let mut columns = proc_macro2::TokenStream::new();
     let mut constraints = proc_macro2::TokenStream::new();
     let mut column_names = Vec::with_capacity(fields.named.len());
-    let mut params = proc_macro2::TokenStream::new();
     let mut expr_type_fields = proc_macro2::TokenStream::new();
     let mut expr_instance_fields = proc_macro2::TokenStream::new();
-    let mut insert_type_fields = proc_macro2::TokenStream::new();
+    let mut builder_fields = vec![];
+    let mut required_fields = 0;
     for field in fields.named.iter_mut() {
         let col_name = field.ident.as_ref().unwrap().unraw().to_string();
         column_names.push(col_name.clone());
@@ -60,7 +60,8 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
         }
 
         let field_name = field.ident.as_ref().unwrap();
-        let outer_type_name = &ty.path.segments.last().unwrap().ident;
+        let outer_type_segment = &ty.path.segments.last().unwrap();
+        let outer_type_name = &outer_type_segment.ident;
         let mut column_params = proc_macro2::TokenStream::new();
         if let Some(FieldAttribute {
             default: Some(val), ..
@@ -69,8 +70,6 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
             if outer_type_name == "Option" {
                 panic!("default values not allowed on Option-typed fields");
             }
-
-            params.extend(quote!(<#ty as mendes::models::ModelType<Sys>>::value(&new.#field_name.unwrap_or(&#val)), ));
 
             let str_val = match val {
                 syn::Lit::Str(inner) => {
@@ -89,27 +88,51 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
                 syn::Lit::Verbatim(_) => todo!(),
             };
             column_params.extend(quote!(("default", #str_val),));
-            insert_type_fields.extend(quote!(
-                #visibility #field_name: ::mendes::models::Defaulted<#ty>,
-            ));
-            bounds.insert(quote!(
-                ::mendes::models::Defaulted<#ty>: mendes::models::ModelType<Sys>
-            ).to_string());
-        } else if outer_type_name == "Serial" {
-            insert_type_fields.extend(quote!(
-                #visibility #field_name: ::mendes::models::Defaulted<#ty>,
-            ));
+            bounds.insert(
+                quote!(
+                    ::mendes::models::Defaulted<#ty>: mendes::models::ModelType<Sys>
+                )
+                .to_string(),
+            );
 
-            params.extend(quote!(<::mendes::models::Defaulted<#ty> as mendes::models::ModelType<Sys>>::value(&new.#field_name), ));
-            bounds.insert(quote!(
-                ::mendes::models::Defaulted<#ty>: mendes::models::ModelType<Sys>
-            ).to_string());
+            builder_fields.push((field_name, ty, false));
+        } else if outer_type_name == "Serial" {
+            let inner_ty = match &outer_type_segment.arguments {
+                syn::PathArguments::AngleBracketed(args) => match args.args.first() {
+                    Some(syn::GenericArgument::Type(syn::Type::Path(ty))) => ty,
+                    _ => panic!("unsupported Serial argument type"),
+                },
+                _ => panic!("unsupported Serial argument type"),
+            };
+
+            bounds.insert(
+                quote!(
+                    #inner_ty: mendes::models::ModelType<Sys>
+                )
+                .to_string(),
+            );
+
+            builder_fields.push((field_name, inner_ty, false));
+        } else if outer_type_name == "Option" {
+            let inner_ty = match &outer_type_segment.arguments {
+                syn::PathArguments::AngleBracketed(args) => match args.args.first() {
+                    Some(syn::GenericArgument::Type(syn::Type::Path(ty))) => ty,
+                    _ => panic!("unsupported Serial argument type"),
+                },
+                _ => panic!("unsupported Serial argument type"),
+            };
+
+            bounds.insert(
+                quote!(
+                    #inner_ty: mendes::models::ModelType<Sys>
+                )
+                .to_string(),
+            );
+
+            builder_fields.push((field_name, inner_ty, false));
         } else {
-            insert_type_fields.extend(quote!(
-                #visibility #field_name: #ty,
-            ));
-            params
-                .extend(quote!(<#ty as mendes::models::ModelType<Sys>>::value(&new.#field_name), ));
+            builder_fields.push((field_name, ty, true));
+            required_fields += 1;
         }
 
         if ty.path.segments.last().unwrap().ident == "PrimaryKey" {
@@ -250,21 +273,70 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
     placeholders.pop();
     placeholders.pop();
 
-    let insert = format!(
-        "INSERT INTO {} ({}) VALUES ({})",
-        table_name,
-        column_names.join(", "),
-        placeholders
-    );
+    let mut query_fmt = proc_macro2::TokenStream::new();
+    query_fmt.extend(quote!(
+        use std::fmt::Write;
+        use ::mendes::models::ModelType;
+        let mut num_name_params = 0;
+    ));
+    let mut query_values = proc_macro2::TokenStream::new();
+    query_values.extend(quote!(let mut num_value_params = 0;));
+    for (fname, _, req) in &builder_fields {
+        let name_str = fname.to_string();
+        if *req {
+            query_fmt.extend(quote!(
+                if num_name_params > 0 {
+                    sql.push_str(", ");
+                }
+                sql.write_fmt(format_args!("\"{}\"", #name_str)).unwrap();
+                num_name_params += 1;
+            ));
+        } else {
+            query_fmt.extend(quote!(if new.#fname.is_some() {
+                if num_name_params > 0 {
+                    sql.push_str(", ");
+                }
+                sql.write_fmt(format_args!("\"{}\"", #name_str)).unwrap();
+                num_name_params += 1;
+            }));
+        }
 
-    let insert_type_name = syn::Ident::new(&format!("{}Insert", name), Span::call_site());
+        if *req {
+            query_values.extend(quote!(
+                if num_value_params > 0 {
+                    sql.push_str(", ");
+                }
+                sql.write_fmt(format_args!("${}", num_value_params + 1)).unwrap();
+                num_value_params += 1;
+                params.push(new.#fname.value());
+            ));
+        } else {
+            query_values.extend(quote!(
+                if let Some(val) = &new.#fname {
+                    if num_value_params > 0 {
+                        sql.push_str(", ");
+                    }
+                    sql.write_fmt(format_args!("${}", num_value_params + 1)).unwrap();
+                    num_value_params += 1;
+                    params.push(val.value());
+                }
+            ));
+        }
+    }
+
+    let builder_state_start = syn::Ident::new(&format!("{}State0", name), Span::call_site());
     let expr_type_name = syn::Ident::new(&format!("{}Expression", name), Span::call_site());
     let orig_impl_generics = ast.generics.split_for_impl().0;
-    let impls = quote!(
+    let insert_state_name = syn::Ident::new(
+        &format!("{}State{}", name, required_fields),
+        Span::call_site(),
+    );
+    let mut impls = quote!(
         impl#orig_impl_generics mendes::models::ModelMeta for #name#type_generics #where_clause {
             type PrimaryKey = #pkey_ty;
             type Expression = #expr_type_name;
-            type Insert = #insert_type_name;
+            type Builder = #builder_state_start;
+            type Insert = #insert_state_name;
 
             const TABLE_NAME: &'static str = #table_name;
             const PRIMARY_KEY_COLUMNS: &'static [::std::borrow::Cow<'static, str>] = &[
@@ -285,16 +357,111 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
                 }
             }
 
-            fn insert(new: &Self::Insert) -> (&str, Vec<&Sys::Parameter>) {
-                (#insert, vec![#params])
+            fn builder() -> Self::Builder {
+                <Self::Builder as Default>::default()
+            }
+
+            fn insert(new: &Self::Insert) -> (String, Vec<&Sys::Parameter>) {
+                let mut sql = String::with_capacity(64);
+                let mut params = Vec::with_capacity(8);
+                sql.push_str(concat!("INSERT INTO \"", #table_name, "\" (\n    "));
+                #query_fmt
+                sql.push_str("\n) VALUES (\n    ");
+                #query_values
+                sql.push_str("\n)");
+                (sql, params)
             }
         }
 
         #visibility struct #expr_type_name { #expr_type_fields }
 
-        #[allow(dead_code)]
-        #visibility struct #insert_type_name { #insert_type_fields }
     );
+
+    let mut seen = 0;
+    for i in 0..(required_fields + 1) {
+        let state_name = syn::Ident::new(&format!("{}State{}", name, i), Span::call_site());
+        let required = (&builder_fields[seen..])
+            .iter()
+            .position(|(_, _, required)| *required);
+
+        let required = match required {
+            Some(val) => val + seen,
+            None => builder_fields.len(),
+        };
+
+        let mut state_fields = proc_macro2::TokenStream::new();
+        let mut transition_fields = proc_macro2::TokenStream::new();
+        let mut optional_methods = proc_macro2::TokenStream::new();
+        for (i, (fname, ty, req)) in builder_fields.iter().enumerate() {
+            if *req && i > required {
+                break;
+            }
+
+            if !*req && i >= required {
+                transition_fields.extend(quote!(
+                    #fname: None,
+                ));
+            } else if i != required {
+                transition_fields.extend(quote!(
+                    #fname: self.#fname,
+                ));
+            }
+
+            if i < required && i >= seen {
+                optional_methods.extend(quote!(
+                    #visibility fn #fname(mut self, #fname: #ty) -> Self {
+                        self.#fname = Some(#fname);
+                        self
+                    }
+                ));
+            }
+
+            if i == required {
+                transition_fields.extend(quote!(
+                    #fname,
+                ));
+            }
+
+            if i >= required {
+                continue;
+            }
+
+            match req {
+                true => state_fields.extend(quote!(#fname: #ty,)),
+                false => state_fields.extend(quote!(#fname: ::core::option::Option<#ty>,)),
+            }
+        }
+
+        if required < builder_fields.len() {
+            if i == 0 {
+                impls.extend(quote!(#[derive(Default)]));
+            }
+
+            let transition_name = &builder_fields[required].0;
+            let transition_type = &builder_fields[required].1;
+            let next_state = syn::Ident::new(&format!("{}State{}", name, i + 1), Span::call_site());
+
+            impls.extend(quote!(
+                #visibility struct #state_name { #state_fields }
+
+                impl #state_name {
+                    #optional_methods
+                    #visibility fn #transition_name(self, #transition_name: #transition_type) -> #next_state {
+                        #next_state { #transition_fields }
+                    }
+                }
+            ));
+        } else {
+            impls.extend(quote!(
+                #visibility struct #state_name { #state_fields }
+                impl #state_name {
+                    #optional_methods
+                }
+            ));
+        }
+
+        seen = required + 1;
+    }
 
     impls
 }
