@@ -14,7 +14,7 @@ fn test_model() {
 
 CREATE TABLE "named" (
     "id" serial NOT NULL,
-    "name" text NOT NULL,
+    "name" text NOT NULL UNIQUE,
     "num" bigint NOT NULL,
     "maybe" boolean,
     "foo" "Foo" NOT NULL,
@@ -55,6 +55,7 @@ CREATE TABLE "named" (
 #[model]
 struct Named {
     id: Serial<i32>,
+    #[model(unique)]
     name: String,
     num: i64,
     maybe: Option<bool>,
