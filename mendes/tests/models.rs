@@ -1,4 +1,5 @@
 #![cfg(all(feature = "models", feature = "postgres"))]
+#![allow(clippy::blacklisted_name)]
 
 use mendes::models::postgres::{types, PostgreSql};
 use mendes::models::{model, model_type, Model, ModelMeta, Serial, System};
