@@ -47,6 +47,7 @@ pub struct Column {
     pub name: Cow<'static, str>,
     pub ty: Cow<'static, str>,
     pub null: bool,
+    pub unique: bool,
     pub default: Option<Cow<'static, str>>,
     pub type_def: Option<Cow<'static, str>>,
 }
@@ -56,6 +57,9 @@ impl fmt::Display for Column {
         write!(fmt, "\"{}\" {}", self.name, self.ty)?;
         if !self.null {
             write!(fmt, " NOT NULL")?;
+        }
+        if self.unique {
+            write!(fmt, " UNIQUE")?;
         }
         if let Some(val) = &self.default {
             write!(fmt, " DEFAULT {}", val)?;

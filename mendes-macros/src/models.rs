@@ -52,10 +52,8 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
             }
         });
 
-        if let Some(FieldAttribute {
-            primary_key: true, ..
-        }) = attr
-        {
+        let attrs = attr.unwrap_or_default();
+        if attrs.primary_key {
             pkey = Some((&field.ident, ty));
         }
 
@@ -63,10 +61,11 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
         let outer_type_segment = &ty.path.segments.last().unwrap();
         let outer_type_name = &outer_type_segment.ident;
         let mut column_params = proc_macro2::TokenStream::new();
-        if let Some(FieldAttribute {
-            default: Some(val), ..
-        }) = attr
-        {
+        if attrs.unique {
+            column_params.extend(quote!(("unique", "")));
+        }
+
+        if let Some(val) = attrs.default {
             if outer_type_name == "Option" {
                 panic!("default values not allowed on Option-typed fields");
             }
@@ -466,10 +465,12 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
     impls
 }
 
-#[derive(Debug, FromMeta)]
+#[derive(Debug, Default, FromMeta)]
 struct FieldAttribute {
     #[darling(default)]
     primary_key: bool,
+    #[darling(default)]
+    unique: bool,
     #[darling(default)]
     default: Option<syn::Lit>,
 }

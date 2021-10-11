@@ -76,10 +76,12 @@ where
             }
         }
 
-        let mut default = None;
+        let (mut unique, mut default) = (false, None);
         for (key, val) in params {
             if *key == "default" {
                 default = Some(Cow::from(*val));
+            } else if *key == "unique" {
+                unique = true;
             }
         }
 
@@ -87,6 +89,7 @@ where
             name,
             ty: format!("\"{}\"", ty_name).into(),
             null: false,
+            unique,
             default,
             type_def: Some(format!("CREATE TYPE \"{}\" AS ENUM({})", ty_name, variant_str).into()),
         }
@@ -151,10 +154,12 @@ where
     }
 
     fn to_column(name: Cow<'static, str>, params: &[(&str, &'static str)]) -> Column {
-        let mut default = None;
+        let (mut unique, mut default) = (false, None);
         for (key, val) in params {
             if *key == "default" {
                 default = Some(Cow::from(*val));
+            } else if *key == "unique" {
+                unique = true;
             }
         }
 
@@ -162,6 +167,7 @@ where
             name,
             ty: "boolean".into(),
             null: false,
+            unique,
             default,
             type_def: None,
         }
@@ -177,10 +183,12 @@ where
     }
 
     fn to_column(name: Cow<'static, str>, params: &[(&str, &'static str)]) -> Column {
-        let mut default = None;
+        let (mut unique, mut default) = (false, None);
         for (key, val) in params {
             if *key == "default" {
                 default = Some(Cow::from(*val));
+            } else if *key == "unique" {
+                unique = true;
             }
         }
 
@@ -188,6 +196,7 @@ where
             name,
             ty: "serial".into(),
             null: false,
+            unique,
             default,
             type_def: None,
         }
@@ -203,10 +212,12 @@ where
     }
 
     fn to_column(name: Cow<'static, str>, params: &[(&str, &'static str)]) -> Column {
-        let mut default = None;
+        let (mut unique, mut default) = (false, None);
         for (key, val) in params {
             if *key == "default" {
                 default = Some(Cow::from(*val));
+            } else if *key == "unique" {
+                unique = true;
             }
         }
 
@@ -214,6 +225,7 @@ where
             name,
             ty: "integer".into(),
             null: false,
+            unique,
             default,
             type_def: None,
         }
@@ -240,6 +252,7 @@ where
             name,
             ty: "bigint".into(),
             null: false,
+            unique: false,
             default,
             type_def: None,
         }
@@ -255,10 +268,12 @@ where
     }
 
     fn to_column(name: Cow<'static, str>, params: &[(&str, &'static str)]) -> Column {
-        let mut default = None;
+        let (mut unique, mut default) = (false, None);
         for (key, val) in params {
             if *key == "default" {
                 default = Some(Cow::from(*val));
+            } else if *key == "unique" {
+                unique = true;
             }
         }
 
@@ -266,6 +281,7 @@ where
             name,
             ty: "bigserial".into(),
             null: false,
+            unique,
             default,
             type_def: None,
         }
@@ -281,10 +297,12 @@ where
     }
 
     fn to_column(name: Cow<'static, str>, params: &[(&str, &'static str)]) -> Column {
-        let mut default = None;
+        let (mut unique, mut default) = (false, None);
         for (key, val) in params {
             if *key == "default" {
                 default = Some(Cow::from(*val));
+            } else if *key == "unique" {
+                unique = true;
             }
         }
 
@@ -292,6 +310,7 @@ where
             name,
             ty: "bytea".into(),
             null: false,
+            unique,
             default,
             type_def: None,
         }
@@ -307,10 +326,12 @@ where
     }
 
     fn to_column(name: Cow<'static, str>, params: &[(&str, &'static str)]) -> Column {
-        let mut default = None;
+        let (mut unique, mut default) = (false, None);
         for (key, val) in params {
             if *key == "default" {
                 default = Some(Cow::from(*val));
+            } else if *key == "unique" {
+                unique = true;
             }
         }
 
@@ -318,6 +339,7 @@ where
             name,
             ty: "text".into(),
             null: false,
+            unique,
             default,
             type_def: None,
         }
@@ -334,10 +356,12 @@ where
     }
 
     fn to_column(name: Cow<'static, str>, params: &[(&str, &'static str)]) -> Column {
-        let mut default = None;
+        let (mut unique, mut default) = (false, None);
         for (key, val) in params {
             if *key == "default" {
                 default = Some(Cow::from(*val));
+            } else if *key == "unique" {
+                unique = true;
             }
         }
 
@@ -345,6 +369,7 @@ where
             name,
             ty: "date".into(),
             null: false,
+            unique,
             default,
             type_def: None,
         }
@@ -361,10 +386,12 @@ where
     }
 
     fn to_column(name: Cow<'static, str>, params: &[(&str, &'static str)]) -> Column {
-        let mut default = None;
+        let (mut unique, mut default) = (false, None);
         for (key, val) in params {
             if *key == "default" {
                 default = Some(Cow::from(*val));
+            } else if *key == "unique" {
+                unique = true;
             }
         }
 
@@ -372,6 +399,7 @@ where
             name,
             ty: "timestamp with time zone".into(),
             null: false,
+            unique,
             default,
             type_def: None,
         }
@@ -388,10 +416,12 @@ where
     }
 
     fn to_column(name: Cow<'static, str>, params: &[(&str, &'static str)]) -> Column {
-        let mut default = None;
+        let (mut unique, mut default) = (false, None);
         for (key, val) in params {
             if *key == "default" {
                 default = Some(Cow::from(*val));
+            } else if *key == "unique" {
+                unique = true;
             }
         }
 
@@ -399,6 +429,7 @@ where
             name,
             ty: "timestamp with time zone".into(),
             null: false,
+            unique,
             default,
             type_def: None,
         }
