@@ -95,24 +95,7 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
             );
 
             builder_fields.push((field_name, ty, false));
-        } else if outer_type_name == "Serial" {
-            let inner_ty = match &outer_type_segment.arguments {
-                syn::PathArguments::AngleBracketed(args) => match args.args.first() {
-                    Some(syn::GenericArgument::Type(syn::Type::Path(ty))) => ty,
-                    _ => panic!("unsupported Serial argument type"),
-                },
-                _ => panic!("unsupported Serial argument type"),
-            };
-
-            bounds.insert(
-                quote!(
-                    #inner_ty: mendes::models::ModelType<Sys>
-                )
-                .to_string(),
-            );
-
-            builder_fields.push((field_name, inner_ty, false));
-        } else if outer_type_name == "Option" {
+        } else if outer_type_name == "Serial" || outer_type_name == "Option" {
             let inner_ty = match &outer_type_segment.arguments {
                 syn::PathArguments::AngleBracketed(args) => match args.args.first() {
                     Some(syn::GenericArgument::Type(syn::Type::Path(ty))) => ty,
