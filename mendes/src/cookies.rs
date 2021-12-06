@@ -156,12 +156,13 @@ fn extract<T: CookieData>(key: &Key, headers: &HeaderMap) -> Option<T> {
         }
 
         let ad = aead::Aad::from(name.as_bytes());
-        let (nonce, mut sealed) = bytes.split_at_mut(NONCE_LEN);
+        let (nonce, sealed) = bytes.split_at_mut(NONCE_LEN);
         let nonce = match aead::Nonce::try_assume_unique_for_key(nonce).ok() {
             Some(nonce) => nonce,
             None => continue,
         };
-        let plain = match key.0.open_in_place(nonce, ad, &mut sealed).ok() {
+
+        let plain = match key.0.open_in_place(nonce, ad, sealed).ok() {
             Some(plain) => plain,
             None => continue,
         };
