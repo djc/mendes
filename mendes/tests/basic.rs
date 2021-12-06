@@ -154,6 +154,7 @@ async fn with_query(_: &App, #[query] query: Query<'_>) -> Result<Response<Strin
 
 #[cfg(feature = "serde-derive")]
 #[derive(Debug, serde::Deserialize)]
+#[allow(dead_code)] // Reflected as part of the `Debug` impl
 struct Query<'a> {
     foo: usize,
     bar: Cow<'a, str>,
