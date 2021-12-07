@@ -127,7 +127,39 @@ impl Key {
             (&*bytes).try_into().map_err(|_| Error::InvalidKeyLength)?,
         ))
     }
+
+    pub fn decrypt<'a>(
+        &self,
+        aad: &[u8],
+        input: &'a mut [u8],
+    ) -> Result<&'a [u8], DecryptionError> {
+        if input.len() <= NONCE_LEN {
+            return Err(DecryptionError(()));
+        }
+
+        let ad = aead::Aad::from(aad);
+        let (sealed, nonce) = input.split_at_mut(input.len() - NONCE_LEN);
+        aead::Nonce::try_assume_unique_for_key(nonce)
+            .and_then(move |nonce| self.0.open_in_place(nonce, ad, sealed))
+            .map(|plain| &*plain)
+            .map_err(|_| DecryptionError(()))
+    }
+
+    pub fn encrypt(&self, aad: &[u8], buf: &mut Vec<u8>) -> Result<(), Error> {
+        let mut nonce_buf = [0; NONCE_LEN];
+        rand::SystemRandom::new()
+            .fill(&mut nonce_buf)
+            .map_err(|_| Error::GetRandomFailed)?;
+        let nonce = aead::Nonce::try_assume_unique_for_key(&nonce_buf).unwrap(); // valid nonce length
+
+        let aad = aead::Aad::from(aad);
+        self.0.seal_in_place_append_tag(nonce, aad, buf).unwrap(); // unique nonce
+        buf.extend(&nonce_buf);
+        Ok(())
+    }
 }
+
+pub struct DecryptionError(());
 
 fn extract<T: CookieData>(key: &Key, headers: &HeaderMap) -> Option<T> {
     let cookies = headers.get("cookie")?;
@@ -146,32 +178,10 @@ fn extract<T: CookieData>(key: &Key, headers: &HeaderMap) -> Option<T> {
         }
 
         let encoded = &cookie[name.len() + 1..];
-        let mut bytes = match BASE64URL_NOPAD.decode(encoded.as_bytes()).ok() {
-            Some(bytes) => bytes,
-            None => continue,
-        };
+        let mut bytes = BASE64URL_NOPAD.decode(encoded.as_bytes()).ok()?;
+        let plain = key.decrypt(name.as_bytes(), &mut bytes).ok()?;
 
-        if bytes.len() <= NONCE_LEN {
-            continue;
-        }
-
-        let ad = aead::Aad::from(name.as_bytes());
-        let (nonce, sealed) = bytes.split_at_mut(NONCE_LEN);
-        let nonce = match aead::Nonce::try_assume_unique_for_key(nonce).ok() {
-            Some(nonce) => nonce,
-            None => continue,
-        };
-
-        let plain = match key.0.open_in_place(nonce, ad, sealed).ok() {
-            Some(plain) => plain,
-            None => continue,
-        };
-
-        let cookie = match bincode::deserialize::<Cookie<T>>(plain).ok() {
-            Some(cookie) => cookie,
-            None => continue,
-        };
-
+        let cookie = bincode::deserialize::<Cookie<T>>(plain).ok()?;
         if cookie.expires < SystemTime::now() {
             continue;
         }
@@ -188,23 +198,11 @@ fn store<T: CookieData>(key: &Key, data: T) -> Result<HeaderValue, Error> {
         .checked_add(expiration)
         .ok_or(Error::ExpiryWindowTooLong)?;
     let cookie = Cookie { expires, data };
-    let bytes = bincode::serialize(&cookie)?;
-    let mut data = vec![0; NONCE_LEN + bytes.len() + TAG_LEN];
 
-    let (nonce, in_out) = data.split_at_mut(NONCE_LEN);
-    let (plain, tag) = in_out.split_at_mut(bytes.len());
-    plain.copy_from_slice(&bytes);
+    let mut bytes = bincode::serialize(&cookie)?;
+    key.encrypt(T::NAME.as_bytes(), &mut bytes)?;
 
-    rand::SystemRandom::new()
-        .fill(nonce)
-        .map_err(|_| Error::GetRandomFailed)?;
-    let nonce = aead::Nonce::try_assume_unique_for_key(nonce).unwrap(); // valid nonce length
-
-    let ad = aead::Aad::from(T::NAME.as_bytes());
-    let ad_tag = key.0.seal_in_place_separate_tag(nonce, ad, plain).unwrap(); // unique nonce
-    tag.copy_from_slice(ad_tag.as_ref());
-
-    let mut s = format!("{}={}; Path=/", T::NAME, BASE64URL_NOPAD.encode(&data));
+    let mut s = format!("{}={}; Path=/", T::NAME, BASE64URL_NOPAD.encode(&bytes));
     if let Some(duration) = T::expires() {
         let expires = chrono::Utc::now()
             + chrono::Duration::from_std(duration).map_err(|_| Error::ExpiryWindowTooLong)?;
