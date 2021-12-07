@@ -167,13 +167,10 @@ fn extract<T: CookieData>(key: &Key, headers: &HeaderMap) -> Option<T> {
     let name = T::NAME;
     for cookie in cookies.split(';') {
         let cookie = cookie.trim_start();
-        if cookie.len() < (name.len() + 1 + NONCE_LEN + TAG_LEN) {
-            continue;
-        }
-        if !cookie.starts_with(name) {
-            continue;
-        }
-        if cookie.as_bytes()[name.len()] != b'=' {
+        if cookie.len() < (name.len() + 1 + NONCE_LEN + TAG_LEN)
+            || !cookie.starts_with(name)
+            || cookie.as_bytes()[name.len()] != b'='
+        {
             continue;
         }
 
