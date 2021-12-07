@@ -22,6 +22,11 @@ pub mod askama;
 /// Cookie support
 pub mod cookies;
 
+#[cfg(feature = "key")]
+#[cfg_attr(docsrs, doc(cfg(feature = "key")))]
+/// AEAD encryption/decryption support
+pub mod key;
+
 #[cfg(feature = "forms")]
 #[cfg_attr(docsrs, doc(cfg(feature = "forms")))]
 /// Form generation and data validation
