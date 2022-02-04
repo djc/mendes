@@ -12,11 +12,6 @@ pub mod application;
 #[cfg(feature = "application")]
 pub use application::{handler, route, scope, Application, Context, Error, FromContext};
 
-#[doc(hidden)]
-#[cfg(feature = "askama")]
-#[cfg_attr(docsrs, doc(cfg(feature = "askama")))]
-pub mod askama;
-
 #[cfg(feature = "cookies")]
 #[cfg_attr(docsrs, doc(cfg(feature = "cookies")))]
 /// Cookie support
