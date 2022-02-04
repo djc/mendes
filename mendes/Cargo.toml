@@ -25,7 +25,6 @@ key = ["data-encoding", "ring"]
 json = ["serde_json"]
 models = ["mendes-macros", "serde-derive"]
 uploads = ["http", "httparse", "twoway"]
-with-askama = ["application", "askama", "mime_guess"]
 with-http-body = ["http-body", "bytes", "pin-utils"]
 with-hyper = ["application", "async-trait", "bytes", "futures-util", "http", "hyper"]
 postgres = ["bytes", "tokio-postgres", "postgres-types", "postgres-types/derive", "postgres-types/with-chrono-0_4"]
@@ -33,7 +32,6 @@ static = ["application", "tokio/fs", "mime_guess", "http"]
 serde-derive = ["serde/derive"]
 
 [dependencies]
-askama = { version = "0.10.5", optional = true, features = ["with-mendes"] }
 async-compression = { version = "0.3.7", features = ["tokio"], optional = true }
 async-trait = { version = "0.1.24", optional = true }
 bincode = { version = "1.3.1", optional = true }
