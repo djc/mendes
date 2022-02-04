@@ -96,23 +96,28 @@ type UnwindSafeHandlerFuture<T, E> = Map<
 >;
 
 fn panic_response(
-    result: Result<Response<Body>, Box<dyn std::any::Any + std::marker::Send + 'static>>,
+    #[allow(unused_variables)] result: Result<
+        Response<Body>,
+        Box<dyn std::any::Any + std::marker::Send + 'static>,
+    >,
 ) -> Result<Response<Body>, Infallible> {
-    let error = match result {
-        Ok(rsp) => return Ok(rsp),
-        Err(e) => e,
-    };
-
-    let panic_str = if let Some(s) = error.downcast_ref::<String>() {
-        Some(s.as_str())
-    } else if let Some(s) = error.downcast_ref::<&'static str>() {
-        Some(*s)
-    } else {
-        Some("no error")
-    };
-
     #[cfg(feature = "tracing")]
-    tracing::error!("caught panic from request handler: {:?}", panic_str);
+    {
+        let error = match result {
+            Ok(rsp) => return Ok(rsp),
+            Err(e) => e,
+        };
+
+        let panic_str = if let Some(s) = error.downcast_ref::<String>() {
+            Some(s.as_str())
+        } else if let Some(s) = error.downcast_ref::<&'static str>() {
+            Some(*s)
+        } else {
+            Some("no error")
+        };
+
+        tracing::error!("caught panic from request handler: {:?}", panic_str);
+    }
 
     Ok(Response::builder()
         .status(StatusCode::INTERNAL_SERVER_ERROR)
