@@ -37,6 +37,13 @@ pub trait Application: Send + Sized {
 
     async fn handle(cx: Context<Self>) -> Response<Self::ResponseBody>;
 
+    fn from_query<'a, T: serde::Deserialize<'a>>(req: &'a Parts) -> Result<T, Self::Error> {
+        let query = req.uri.query().ok_or(Error::QueryMissing)?;
+        let data =
+            serde_urlencoded::from_bytes::<T>(query.as_bytes()).map_err(Error::QueryDecode)?;
+        Ok(data)
+    }
+
     fn from_body_bytes<'de, T: serde::de::Deserialize<'de>>(
         req: &Parts,
         bytes: &'de [u8],
@@ -454,10 +461,7 @@ where
         _: &mut PathState,
         _: &mut Option<A::RequestBody>,
     ) -> Result<Self, A::Error> {
-        let query = req.uri.query().ok_or(Error::QueryMissing)?;
-        let data =
-            serde_urlencoded::from_bytes::<T>(query.as_bytes()).map_err(Error::QueryDecode)?;
-        Ok(Query(data))
+        A::from_query(req).map(Query)
     }
 }
 
