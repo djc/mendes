@@ -27,7 +27,7 @@ This should definitely become more minimal over time.
 ```rust
 use async_trait::async_trait;
 use hyper::Body;
-use mendes::application::Responder;
+use mendes::application::IntoResponse;
 use mendes::http::request::Parts;
 use mendes::http::{Response, StatusCode};
 use mendes::{handler, route, Application, Context};
@@ -73,7 +73,7 @@ impl From<&Error> for StatusCode {
     }
 }
 
-impl Responder<App> for Error {
+impl IntoResponse<App> for Error {
     fn into_response(self, _: &App, _: &Parts) -> Response<Body> {
         let Error::Mendes(err) = self;
         Response::builder()

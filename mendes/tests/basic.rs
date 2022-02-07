@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use mendes::application::Responder;
+use mendes::application::IntoResponse;
 use mendes::http::request::Parts;
 use mendes::http::{Method, Request, Response, StatusCode};
 use mendes::{handler, route, scope, Application, Context};
@@ -218,7 +218,7 @@ impl From<&Error> for StatusCode {
     }
 }
 
-impl Responder<App> for Error {
+impl IntoResponse<App> for Error {
     fn into_response(self, _: &App, _: &Parts) -> Response<String> {
         let Error::Mendes(err) = self;
         Response::builder()

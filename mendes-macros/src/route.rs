@@ -250,7 +250,7 @@ pub fn route(ast: &mut syn::ExprMatch) {
                 *arm.body = parse_quote!({
                     #rewind
                     let rsp = #path::handler(#cx.as_mut()).await;
-                    ::mendes::application::Responder::into_response(rsp, &*#cx.app, &cx.req)
+                    ::mendes::application::IntoResponse::into_response(rsp, &*#cx.app, &cx.req)
                 });
             }
             syn::Expr::Match(inner) => route(inner),
@@ -267,7 +267,7 @@ pub fn route(ast: &mut syn::ExprMatch) {
         ast.arms.push(parse_quote!(
             _ => {
                 let e = ::mendes::Error::#variant;
-                ::mendes::application::Responder::into_response(e, &*#cx.app, &cx.req)
+                ::mendes::application::IntoResponse::into_response(e, &*#cx.app, &cx.req)
             }
         ));
     }

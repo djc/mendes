@@ -33,7 +33,7 @@ pub use mendes_macros::{handler, route, scope};
 pub trait Application: Send + Sized {
     type RequestBody: Send;
     type ResponseBody: Send;
-    type Error: Responder<Self> + WithStatus + From<Error> + Send;
+    type Error: IntoResponse<Self> + WithStatus + From<Error> + Send;
 
     async fn handle(cx: Context<Self>) -> Response<Self::ResponseBody>;
 
@@ -84,19 +84,19 @@ pub trait WithStatus {}
 
 impl<T> WithStatus for T where StatusCode: for<'a> From<&'a T> {}
 
-pub trait Responder<A: Application> {
+pub trait IntoResponse<A: Application> {
     fn into_response(self, app: &A, req: &Parts) -> Response<A::ResponseBody>;
 }
 
-impl<A: Application> Responder<A> for Response<A::ResponseBody> {
+impl<A: Application> IntoResponse<A> for Response<A::ResponseBody> {
     fn into_response(self, _: &A, _: &Parts) -> Response<A::ResponseBody> {
         self
     }
 }
 
-impl<A: Application, T> Responder<A> for Result<T, A::Error>
+impl<A: Application, T> IntoResponse<A> for Result<T, A::Error>
 where
-    T: Responder<A>,
+    T: IntoResponse<A>,
 {
     fn into_response(self, app: &A, req: &Parts) -> Response<A::ResponseBody> {
         match self {
@@ -106,7 +106,7 @@ where
     }
 }
 
-impl<A: Application> Responder<A> for Error {
+impl<A: Application> IntoResponse<A> for Error {
     fn into_response(self, app: &A, req: &Parts) -> Response<A::ResponseBody> {
         A::Error::from(self).into_response(app, req)
     }
