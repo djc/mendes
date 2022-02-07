@@ -461,6 +461,27 @@ where
     }
 }
 
+impl<'de, 'a: 'de, A: Application, T> FromContext<'a, A> for Option<Query<T>>
+where
+    T: serde::Deserialize<'de>,
+{
+    fn from_context(
+        _: &'a Arc<A>,
+        req: &'a Parts,
+        _: &mut PathState,
+        _: &mut Option<A::RequestBody>,
+    ) -> Result<Self, A::Error> {
+        let query = match req.uri.query() {
+            Some(query) => query,
+            None => return Ok(None),
+        };
+
+        let data =
+            serde_urlencoded::from_bytes::<T>(query.as_bytes()).map_err(Error::QueryDecode)?;
+        Ok(Some(Query(data)))
+    }
+}
+
 #[cfg(feature = "with-http-body")]
 #[cfg_attr(docsrs, doc(cfg(feature = "with-http-body")))]
 async fn from_body<B, T: serde::de::DeserializeOwned>(req: &Parts, body: B) -> Result<T, Error>
