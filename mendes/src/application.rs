@@ -75,13 +75,13 @@ pub trait Application: Send + Sized {
         Ok(to_bytes(body).await?)
     }
 
-    fn redirect(status: StatusCode, path: &str) -> Response<Self::ResponseBody>
+    fn redirect(status: StatusCode, path: impl AsRef<str>) -> Response<Self::ResponseBody>
     where
         Self::ResponseBody: Default,
     {
         http::Response::builder()
             .status(status)
-            .header(LOCATION, path)
+            .header(LOCATION, path.as_ref())
             .body(Self::ResponseBody::default())
             .unwrap()
     }
