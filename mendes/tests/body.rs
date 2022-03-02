@@ -49,7 +49,7 @@ impl Application for App {
 #[cfg(feature = "json")]
 #[handler(POST)]
 async fn sum(_: &App, req: &Parts, body: Body) -> Result<Response<String>, Error> {
-    let numbers = App::from_body::<Vec<f32>>(req, body).await.unwrap();
+    let numbers = App::from_body::<Vec<f32>>(req, body, 16).await.unwrap();
     Ok(Response::builder()
         .body(numbers.iter().sum::<f32>().to_string())
         .unwrap())

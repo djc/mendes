@@ -56,24 +56,25 @@ pub trait Application: Send + Sized {
     async fn from_body<T: serde::de::DeserializeOwned>(
         req: &Parts,
         body: Self::RequestBody,
+        max_len: usize,
     ) -> Result<T, Error>
     where
         Self::RequestBody: HttpBody + Send,
         <Self::RequestBody as HttpBody>::Data: Send,
         <Self::RequestBody as HttpBody>::Error: Into<Box<dyn StdError + Sync + Send>>,
     {
-        from_body::<Self::RequestBody, T>(req, body).await
+        from_body::<Self::RequestBody, T>(req, body, max_len).await
     }
 
     #[cfg(feature = "with-http-body")]
     #[cfg_attr(docsrs, doc(cfg(feature = "with-http-body")))]
-    async fn body_bytes<B>(body: B) -> Result<Bytes, Error>
+    async fn body_bytes<B>(body: B, max_len: usize) -> Result<Bytes, Error>
     where
         B: HttpBody + Send,
         <B as HttpBody>::Data: Send,
         B::Error: Into<Box<dyn StdError + Sync + Send + 'static>>,
     {
-        Ok(to_bytes(body).await?)
+        Ok(to_bytes(body, max_len).await?)
     }
 
     fn redirect(status: StatusCode, path: impl AsRef<str>) -> Response<Self::ResponseBody>
@@ -468,12 +469,16 @@ where
 
 #[cfg(feature = "with-http-body")]
 #[cfg_attr(docsrs, doc(cfg(feature = "with-http-body")))]
-async fn from_body<B, T: serde::de::DeserializeOwned>(req: &Parts, body: B) -> Result<T, Error>
+async fn from_body<B, T: serde::de::DeserializeOwned>(
+    req: &Parts,
+    body: B,
+    max_len: usize,
+) -> Result<T, Error>
 where
     B: HttpBody,
     B::Error: Into<Box<dyn StdError + Send + Sync + 'static>>,
 {
-    let bytes = to_bytes(body).await?;
+    let bytes = to_bytes(body, max_len).await?;
     deserialize_body!(req, bytes)
 }
 
@@ -486,7 +491,7 @@ fn from_bytes<'de, T: serde::de::Deserialize<'de>>(
 
 #[cfg(feature = "with-http-body")]
 #[cfg_attr(docsrs, doc(cfg(feature = "with-http-body")))]
-async fn to_bytes<B>(body: B) -> Result<Bytes, Error>
+async fn to_bytes<B>(body: B, max_len: usize) -> Result<Bytes, Error>
 where
     B: HttpBody,
     B::Error: Into<Box<dyn StdError + Send + Sync + 'static>>,
@@ -500,11 +505,21 @@ where
         return Ok(Bytes::new());
     };
 
+    let mut received = first.remaining();
+    if received > max_len {
+        return Err(Error::BodyTooLarge);
+    }
+
     let second = if let Some(buf) = body.data().await {
         buf.map_err(|err| Error::BodyReceive(err.into()))?
     } else {
         return Ok(first.copy_to_bytes(first.remaining()));
     };
+
+    received += second.remaining();
+    if received > max_len {
+        return Err(Error::BodyTooLarge);
+    }
 
     // With more than 1 buf, we gotta flatten into a Vec first.
     let cap = first.remaining() + second.remaining() + body.size_hint().lower() as usize;
@@ -513,7 +528,13 @@ where
     vec.put(second);
 
     while let Some(buf) = body.data().await {
-        vec.put(buf.map_err(|err| Error::BodyReceive(err.into()))?);
+        let buf = buf.map_err(|err| Error::BodyReceive(err.into()))?;
+        received += buf.remaining();
+        if received > max_len {
+            return Err(Error::BodyTooLarge);
+        }
+
+        vec.put(buf);
     }
 
     Ok(vec.into())
@@ -602,6 +623,9 @@ pub enum Error {
     #[cfg(feature = "with-http-body")]
     #[error("unable to receive request body: {0}")]
     BodyReceive(Box<dyn StdError + Send + Sync + 'static>),
+    #[cfg(feature = "with-http-body")]
+    #[error("request body too large")]
+    BodyTooLarge,
     #[cfg(feature = "json")]
     #[error("unable to decode body as JSON: {0}")]
     BodyDecodeJson(#[from] serde_json::Error),
@@ -629,6 +653,8 @@ impl From<&Error> for StatusCode {
             PathNotFound | PathComponentMissing | PathParse | PathDecode => StatusCode::NOT_FOUND,
             #[cfg(feature = "with-http-body")]
             BodyReceive(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            #[cfg(feature = "with-http-body")]
+            BodyTooLarge => StatusCode::BAD_REQUEST,
             BodyDecodeForm(_) => StatusCode::UNPROCESSABLE_ENTITY,
             #[cfg(feature = "json")]
             BodyDecodeJson(_) => StatusCode::UNPROCESSABLE_ENTITY,
