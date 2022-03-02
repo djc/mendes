@@ -67,10 +67,11 @@ pub trait Application: Send + Sized {
 
     #[cfg(feature = "with-http-body")]
     #[cfg_attr(docsrs, doc(cfg(feature = "with-http-body")))]
-    async fn body_bytes<B>(body: B) -> Result<Bytes, B::Error>
+    async fn body_bytes<B>(body: B) -> Result<Bytes, Error>
     where
         B: HttpBody + Send,
         <B as HttpBody>::Data: Send,
+        B::Error: Into<Box<dyn StdError + Sync + Send + 'static>>,
     {
         Ok(to_bytes(body).await?)
     }
@@ -470,9 +471,9 @@ where
 async fn from_body<B, T: serde::de::DeserializeOwned>(req: &Parts, body: B) -> Result<T, Error>
 where
     B: HttpBody,
-    B::Error: Into<Box<dyn StdError + Send + Sync>>,
+    B::Error: Into<Box<dyn StdError + Send + Sync + 'static>>,
 {
-    let bytes = to_bytes(body).await.map_err(|_| Error::BodyReceive)?;
+    let bytes = to_bytes(body).await?;
     deserialize_body!(req, bytes)
 }
 
@@ -485,21 +486,22 @@ fn from_bytes<'de, T: serde::de::Deserialize<'de>>(
 
 #[cfg(feature = "with-http-body")]
 #[cfg_attr(docsrs, doc(cfg(feature = "with-http-body")))]
-async fn to_bytes<T>(body: T) -> Result<Bytes, T::Error>
+async fn to_bytes<B>(body: B) -> Result<Bytes, Error>
 where
-    T: HttpBody,
+    B: HttpBody,
+    B::Error: Into<Box<dyn StdError + Send + Sync + 'static>>,
 {
     pin_utils::pin_mut!(body);
 
     // If there's only 1 chunk, we can just return Buf::to_bytes()
     let mut first = if let Some(buf) = body.data().await {
-        buf?
+        buf.map_err(|err| Error::BodyReceive(err.into()))?
     } else {
         return Ok(Bytes::new());
     };
 
     let second = if let Some(buf) = body.data().await {
-        buf?
+        buf.map_err(|err| Error::BodyReceive(err.into()))?
     } else {
         return Ok(first.copy_to_bytes(first.remaining()));
     };
@@ -511,7 +513,7 @@ where
     vec.put(second);
 
     while let Some(buf) = body.data().await {
-        vec.put(buf?);
+        vec.put(buf.map_err(|err| Error::BodyReceive(err.into()))?);
     }
 
     Ok(vec.into())
@@ -597,8 +599,9 @@ pub enum Error {
     QueryMissing,
     #[error("unable to decode request URI query: {0}")]
     QueryDecode(serde_urlencoded::de::Error),
-    #[error("unable to receive request body")]
-    BodyReceive,
+    #[cfg(feature = "with-http-body")]
+    #[error("unable to receive request body: {0}")]
+    BodyReceive(Box<dyn StdError + Send + Sync + 'static>),
     #[cfg(feature = "json")]
     #[error("unable to decode body as JSON: {0}")]
     BodyDecodeJson(#[from] serde_json::Error),
@@ -624,7 +627,8 @@ impl From<&Error> for StatusCode {
             QueryMissing | QueryDecode(_) | BodyNoType => StatusCode::BAD_REQUEST,
             BodyUnknownType(_) => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             PathNotFound | PathComponentMissing | PathParse | PathDecode => StatusCode::NOT_FOUND,
-            BodyReceive => StatusCode::INTERNAL_SERVER_ERROR,
+            #[cfg(feature = "with-http-body")]
+            BodyReceive(_) => StatusCode::INTERNAL_SERVER_ERROR,
             BodyDecodeForm(_) => StatusCode::UNPROCESSABLE_ENTITY,
             #[cfg(feature = "json")]
             BodyDecodeJson(_) => StatusCode::UNPROCESSABLE_ENTITY,
