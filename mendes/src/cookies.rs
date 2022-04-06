@@ -85,6 +85,17 @@ pub trait CookieData: DeserializeOwned + Serialize {
     ///
     /// The `cookie` macro sets this to 6 hours.
     fn expires() -> Option<Duration>;
+
+    fn decode(value: &str, key: &Key) -> Option<Self> {
+        let mut bytes = BASE64URL_NOPAD.decode(value.as_bytes()).ok()?;
+        let plain = key.decrypt(Self::NAME.as_bytes(), &mut bytes).ok()?;
+
+        let cookie = bincode::deserialize::<Cookie<Self>>(plain).ok()?;
+        match SystemTime::now() < cookie.expires {
+            true => Some(cookie.data),
+            false => None,
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize)]
@@ -111,15 +122,10 @@ fn extract<T: CookieData>(key: &Key, headers: &HeaderMap) -> Option<T> {
         }
 
         let encoded = &cookie[name.len() + 1..];
-        let mut bytes = BASE64URL_NOPAD.decode(encoded.as_bytes()).ok()?;
-        let plain = key.decrypt(name.as_bytes(), &mut bytes).ok()?;
-
-        let cookie = bincode::deserialize::<Cookie<T>>(plain).ok()?;
-        if cookie.expires < SystemTime::now() {
-            continue;
+        match T::decode(encoded, key) {
+            Some(data) => return Some(data),
+            None => continue,
         }
-
-        return Some(cookie.data);
     }
 
     None
