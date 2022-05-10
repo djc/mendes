@@ -513,7 +513,6 @@ pub struct File<'a> {
 }
 
 impl super::forms::ToField for File<'_> {
-    #![allow(clippy::wrong_self_convention)] // https://github.com/rust-lang/rust-clippy/issues/7374
     fn to_field(name: std::borrow::Cow<'static, str>, _: &[(&str, &str)]) -> super::forms::Field {
         super::forms::Field::File(super::forms::FileInput { name })
     }
