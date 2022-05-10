@@ -1,5 +1,3 @@
-#![allow(clippy::wrong_self_convention)] // https://github.com/rust-lang/rust-clippy/issues/7374
-
 use std::borrow::Cow;
 use std::error::Error as StdError;
 use std::fmt;
