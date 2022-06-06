@@ -22,7 +22,7 @@ but experiments for those who are curious. Feedback is always welcome though!
 
 ## Minimal example
 
-This should definitely become more minimal over time.
+This should definitely become more minimal over time. To run the example see the [./mendes/examples](./mendes/examples) directory.
 
 ```rust
 use async_trait::async_trait;
