@@ -11,9 +11,10 @@ mod route;
 mod util;
 
 #[proc_macro_attribute]
-pub fn cookie(_: TokenStream, item: TokenStream) -> TokenStream {
+pub fn cookie(meta: TokenStream, item: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(item as syn::ItemStruct);
-    let cookie = cookies::cookie(&ast);
+    let meta = parse_macro_input!(meta as cookies::CookieMeta);
+    let cookie = cookies::cookie(&meta, &ast);
     let mut tokens = ast.to_token_stream();
     tokens.extend(cookie);
     TokenStream::from(tokens)

@@ -81,10 +81,43 @@ pub trait CookieData: DeserializeOwned + Serialize {
     /// The name to use for the cookie
     const NAME: &'static str;
 
-    /// The expiry time for the cookie
+    /// Defines the host to which the cookie will be sent
+    fn domain() -> Option<&'static str> {
+        None
+    }
+
+    /// Forbid JavaScript access to the cookie
     ///
-    /// The `cookie` macro sets this to 6 hours.
-    fn expires() -> Option<Duration>;
+    /// Defaults to `false`.
+    fn http_only() -> bool {
+        false
+    }
+
+    /// The maximum age for the cookie in seconds
+    ///
+    /// Defaults to 6 hours.
+    fn max_age() -> u32 {
+        6 * 60 * 60
+    }
+
+    /// Set a path prefix to constrain use of the cookie
+    fn path() -> Option<&'static str> {
+        None
+    }
+
+    /// Controls whether the cookie is sent with cross-origin requests
+    ///
+    /// Defaults to `Some(SameSite::None)`.
+    fn same_site() -> Option<SameSite> {
+        Some(SameSite::None)
+    }
+
+    /// Restrict the cookie to being sent only over secure connections
+    ///
+    /// Defaults to `true`.
+    fn secure() -> bool {
+        true
+    }
 
     fn decode(value: &str, key: &Key) -> Option<Self> {
         let mut bytes = BASE64URL_NOPAD.decode(value.as_bytes()).ok()?;
@@ -132,26 +165,41 @@ fn extract<T: CookieData>(key: &Key, headers: &HeaderMap) -> Option<T> {
 }
 
 fn store<T: CookieData>(key: &Key, data: T) -> Result<HeaderValue, Error> {
-    let expiration = T::expires().unwrap_or_else(|| Duration::new(NO_EXPIRY, 0));
     let expires = SystemTime::now()
-        .checked_add(expiration)
+        .checked_add(Duration::new(T::max_age() as u64, 0))
         .ok_or(Error::ExpiryWindowTooLong)?;
     let cookie = Cookie { expires, data };
 
     let mut bytes = bincode::serialize(&cookie)?;
     key.encrypt(T::NAME.as_bytes(), &mut bytes)?;
 
-    let mut s = format!("{}={}; Path=/", T::NAME, BASE64URL_NOPAD.encode(&bytes));
-    if let Some(duration) = T::expires() {
-        let expires = chrono::Utc::now()
-            + chrono::Duration::from_std(duration).map_err(|_| Error::ExpiryWindowTooLong)?;
-        write!(
-            s,
-            "; Expires={}",
-            expires.format("%a, %d %b %Y %H:%M:%S GMT")
-        )
-        .unwrap(); // writing to a string buffer seems safe enough
+    let mut s = format!(
+        "{}={}; Max-Age={}",
+        T::NAME,
+        BASE64URL_NOPAD.encode(&bytes),
+        T::max_age()
+    );
+
+    if let Some(domain) = T::domain() {
+        write!(s, "; Domain={}", domain).unwrap();
     }
+
+    if T::http_only() {
+        write!(s, "; HttpOnly").unwrap();
+    }
+
+    if let Some(path) = T::path() {
+        write!(s, "; Path={}", path).unwrap();
+    }
+
+    if let Some(same_site) = T::same_site() {
+        write!(s, "; SameSite={:?}", same_site).unwrap();
+    }
+
+    if T::secure() {
+        write!(s, "; Secure").unwrap();
+    }
+
     Ok(HeaderValue::try_from(s)?)
 }
 
@@ -160,6 +208,13 @@ fn tombstone(name: &str) -> Result<HeaderValue, Error> {
         "{}=None; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT",
         name
     ))?)
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum SameSite {
+    Lax,
+    None,
+    Strict,
 }
 
 #[derive(Debug, Error)]
@@ -173,5 +228,3 @@ pub enum Error {
     #[error("key error: {0}")]
     Key(#[from] crate::key::Error),
 }
-
-const NO_EXPIRY: u64 = 60 * 60 * 24 * 4000;

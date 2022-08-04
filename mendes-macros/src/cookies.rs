@@ -1,19 +1,145 @@
 use proc_macro2::Span;
-use quote::quote;
+use quote::{format_ident, quote, ToTokens};
+use syn::parse::{Parse, ParseStream};
+use syn::punctuated::Punctuated;
+use syn::token::Comma;
 
 /// Derive the `mendes::cookies::CookieData` trait For the given struct
 ///
 /// Defaults to an expiry time of 6 hours.
-pub fn cookie(ast: &syn::ItemStruct) -> proc_macro2::TokenStream {
+pub fn cookie(meta: &CookieMeta, ast: &syn::ItemStruct) -> proc_macro2::TokenStream {
     let ident = &ast.ident;
     let name = syn::LitStr::new(&ident.to_string(), Span::call_site());
+
+    let (http_only, max_age, secure) = (meta.http_only, meta.max_age, meta.secure);
+    let domain = match &meta.domain {
+        Some(v) => quote!(Some(#v)),
+        None => quote!(None),
+    };
+    let path = match &meta.path {
+        Some(v) => quote!(Some(#v)),
+        None => quote!(None),
+    };
+    let same_site = match &meta.same_site {
+        Some(v) => {
+            let variant = format_ident!("{}", v);
+            quote!(Some(mendes::cookies::SameSite::#variant))
+        }
+        None => quote!(None),
+    };
+
     quote!(
         impl mendes::cookies::CookieData for #ident {
             const NAME: &'static str = #name;
 
-            fn expires() -> Option<std::time::Duration> {
-                Some(std::time::Duration::new(60 * 60 * 6, 0))
+            fn domain() -> Option<&'static str> {
+                #domain
+            }
+
+            fn http_only() -> bool {
+                #http_only
+            }
+
+            fn max_age() -> u32 {
+                #max_age
+            }
+
+            fn path() -> Option<&'static str> {
+                #path
+            }
+
+            fn same_site() -> Option<mendes::cookies::SameSite> {
+                #same_site
+            }
+
+            fn secure() -> bool {
+                #secure
             }
         }
     )
+}
+
+pub struct CookieMeta {
+    domain: Option<String>,
+    http_only: bool,
+    max_age: u32,
+    path: Option<String>,
+    same_site: Option<String>,
+    secure: bool,
+}
+
+impl Parse for CookieMeta {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut new = CookieMeta::default();
+        for field in Punctuated::<syn::MetaNameValue, Comma>::parse_terminated(input)? {
+            if field.path.is_ident("domain") {
+                match field.lit {
+                    syn::Lit::Str(v) => new.domain = Some(v.value()),
+                    _ => panic!("expected string value for key 'domain'"),
+                }
+            } else if field.path.is_ident("http_only") {
+                match field.lit {
+                    syn::Lit::Bool(v) => {
+                        new.http_only = v.value();
+                    }
+                    _ => panic!("expected string value for key 'http_only'"),
+                }
+            } else if field.path.is_ident("max_age") {
+                match field.lit {
+                    syn::Lit::Int(v) => {
+                        new.max_age = v
+                            .base10_parse::<u32>()
+                            .expect("expected u32 value for key 'max_age'");
+                    }
+                    _ => panic!("expected string value for key 'max_age'"),
+                }
+            } else if field.path.is_ident("path") {
+                match field.lit {
+                    syn::Lit::Str(v) => new.path = Some(v.value()),
+                    _ => panic!("expected string value for key 'path'"),
+                }
+            } else if field.path.is_ident("same_site") {
+                match field.lit {
+                    syn::Lit::Str(v) => {
+                        let value = v.value();
+                        new.same_site = Some(match value.as_str() {
+                            "Strict" => value,
+                            "Lax" => value,
+                            "None" => value,
+                            _ => panic!("expected 'Strict', 'Lax' or 'None' for key 'same_site'"),
+                        });
+                    }
+                    _ => panic!("expected string value for key 'same_site'"),
+                }
+            } else if field.path.is_ident("secure") {
+                match field.lit {
+                    syn::Lit::Bool(v) => {
+                        new.secure = v.value();
+                    }
+                    _ => panic!("expected string value for key 'secure'"),
+                }
+            } else {
+                panic!("unexpected key {:?}", field.path.to_token_stream());
+            }
+        }
+
+        if new.same_site.as_deref() == Some("Strict") && !new.secure {
+            panic!("'same_site' is 'Strict' but 'secure' is false");
+        }
+
+        Ok(new)
+    }
+}
+
+impl Default for CookieMeta {
+    fn default() -> Self {
+        Self {
+            domain: None,
+            http_only: false,
+            max_age: 6 * 60 * 60,
+            path: None,
+            same_site: Some("None".to_string()),
+            secure: true,
+        }
+    }
 }
