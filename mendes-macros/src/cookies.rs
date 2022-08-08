@@ -11,12 +11,9 @@ pub fn cookie(meta: &CookieMeta, ast: &syn::ItemStruct) -> proc_macro2::TokenStr
     let ident = &ast.ident;
     let name = syn::LitStr::new(&ident.to_string(), Span::call_site());
 
-    let (http_only, max_age, secure) = (meta.http_only, meta.max_age, meta.secure);
+    let (http_only, max_age, path, secure) =
+        (meta.http_only, meta.max_age, &meta.path, meta.secure);
     let domain = match &meta.domain {
-        Some(v) => quote!(Some(#v)),
-        None => quote!(None),
-    };
-    let path = match &meta.path {
         Some(v) => quote!(Some(#v)),
         None => quote!(None),
     };
@@ -44,7 +41,7 @@ pub fn cookie(meta: &CookieMeta, ast: &syn::ItemStruct) -> proc_macro2::TokenStr
                 #max_age
             }
 
-            fn path() -> Option<&'static str> {
+            fn path() -> &'static str {
                 #path
             }
 
@@ -63,7 +60,7 @@ pub struct CookieMeta {
     domain: Option<String>,
     http_only: bool,
     max_age: u32,
-    path: Option<String>,
+    path: String,
     same_site: Option<String>,
     secure: bool,
 }
@@ -95,7 +92,7 @@ impl Parse for CookieMeta {
                 }
             } else if field.path.is_ident("path") {
                 match field.lit {
-                    syn::Lit::Str(v) => new.path = Some(v.value()),
+                    syn::Lit::Str(v) => new.path = v.value(),
                     _ => panic!("expected string value for key 'path'"),
                 }
             } else if field.path.is_ident("same_site") {
@@ -137,8 +134,8 @@ impl Default for CookieMeta {
             domain: None,
             http_only: false,
             max_age: 6 * 60 * 60,
-            path: None,
-            same_site: Some("None".to_string()),
+            path: "/".to_owned(),
+            same_site: Some("None".to_owned()),
             secure: true,
         }
     }
