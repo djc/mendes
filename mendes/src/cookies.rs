@@ -101,8 +101,11 @@ pub trait CookieData: DeserializeOwned + Serialize {
     }
 
     /// Set a path prefix to constrain use of the cookie
-    fn path() -> Option<&'static str> {
-        None
+    ///
+    /// The browser default here is to use the current directory (removing the last path
+    /// segment from the current URL), which seems pretty useless. Instead, we default to `/` here.
+    fn path() -> &'static str {
+        "/"
     }
 
     /// Controls whether the cookie is sent with cross-origin requests
@@ -174,10 +177,11 @@ fn store<T: CookieData>(key: &Key, data: T) -> Result<HeaderValue, Error> {
     key.encrypt(T::NAME.as_bytes(), &mut bytes)?;
 
     let mut s = format!(
-        "{}={}; Max-Age={}",
+        "{}={}; Max-Age={}; Path={}",
         T::NAME,
         BASE64URL_NOPAD.encode(&bytes),
-        T::max_age()
+        T::max_age(),
+        T::path(),
     );
 
     if let Some(domain) = T::domain() {
@@ -186,10 +190,6 @@ fn store<T: CookieData>(key: &Key, data: T) -> Result<HeaderValue, Error> {
 
     if T::http_only() {
         write!(s, "; HttpOnly").unwrap();
-    }
-
-    if let Some(path) = T::path() {
-        write!(s, "; Path={}", path).unwrap();
     }
 
     if let Some(same_site) = T::same_site() {
