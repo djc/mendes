@@ -481,7 +481,7 @@ impl<'a> Part<'a> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
     Message(String),
 }
