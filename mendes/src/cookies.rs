@@ -68,7 +68,7 @@ mod application {
         fn set_cookie_header<T: CookieData>(&self, data: Option<T>) -> Result<HeaderValue, Error> {
             match data {
                 Some(data) => store(self.key(), data),
-                None => tombstone(T::NAME),
+                None => cookie::<T>(None),
             }
         }
     }
@@ -171,18 +171,28 @@ fn store<T: CookieData>(key: &Key, data: T) -> Result<HeaderValue, Error> {
     let expires = SystemTime::now()
         .checked_add(Duration::new(T::max_age() as u64, 0))
         .ok_or(Error::ExpiryWindowTooLong)?;
-    let cookie = Cookie { expires, data };
 
-    let mut bytes = bincode::serialize(&cookie)?;
+    let mut bytes = bincode::serialize(&Cookie { expires, data })?;
     key.encrypt(T::NAME.as_bytes(), &mut bytes)?;
+    let value = BASE64URL_NOPAD.encode(&bytes);
+    cookie::<T>(Some(&value))
+}
 
-    let mut s = format!(
-        "{}={}; Max-Age={}; Path={}",
-        T::NAME,
-        BASE64URL_NOPAD.encode(&bytes),
-        T::max_age(),
-        T::path(),
-    );
+fn cookie<T: CookieData>(value: Option<&str>) -> Result<HeaderValue, Error> {
+    let mut s = match value {
+        Some(value) => format!(
+            "{}={}; Max-Age={}; Path={}",
+            T::NAME,
+            value,
+            T::max_age(),
+            T::path(),
+        ),
+        None => format!(
+            "{}=None; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path={}",
+            T::NAME,
+            T::path(),
+        ),
+    };
 
     if let Some(domain) = T::domain() {
         write!(s, "; Domain={}", domain).unwrap();
@@ -201,13 +211,6 @@ fn store<T: CookieData>(key: &Key, data: T) -> Result<HeaderValue, Error> {
     }
 
     Ok(HeaderValue::try_from(s)?)
-}
-
-fn tombstone(name: &str) -> Result<HeaderValue, Error> {
-    Ok(HeaderValue::try_from(format!(
-        "{}=None; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT",
-        name
-    ))?)
 }
 
 #[derive(Debug, Clone, Copy)]
