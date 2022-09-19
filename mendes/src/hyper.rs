@@ -139,6 +139,22 @@ where
     }
 }
 
+impl<'a, A: Application> FromContext<'a, A> for ClientAddr
+where
+    A: Application<RequestBody = Body>,
+{
+    fn from_context(
+        _: &'a Arc<A>,
+        req: &'a Parts,
+        _: &mut PathState,
+        _: &mut Option<Body>,
+    ) -> Result<Self, A::Error> {
+        // This is safe because we insert ClientAddr into the request extensions
+        // unconditionally in the ConnectionService::call method.
+        Ok(req.extensions.get::<ClientAddr>().copied().unwrap())
+    }
+}
+
 #[cfg(feature = "compression")]
 #[cfg_attr(docsrs, doc(cfg(feature = "compression")))]
 mod encoding {
@@ -269,6 +285,7 @@ mod encoding {
 #[cfg_attr(docsrs, doc(cfg(feature = "application")))]
 pub use encoding::encode_content;
 
+#[derive(Debug, Clone, Copy)]
 pub struct ClientAddr(SocketAddr);
 
 impl std::ops::Deref for ClientAddr {
