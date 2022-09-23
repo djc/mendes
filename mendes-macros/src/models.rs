@@ -362,7 +362,7 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
     let mut seen = 0;
     for i in 0..(required_fields + 1) {
         let state_name = syn::Ident::new(&format!("{}State{}", name, i), Span::call_site());
-        let required = (&builder_fields[seen..])
+        let required = builder_fields[seen..]
             .iter()
             .position(|(_, _, required)| *required);
 
