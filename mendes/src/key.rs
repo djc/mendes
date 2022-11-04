@@ -67,7 +67,7 @@ impl Key {
 
         let aad = aead::Aad::from(aad);
         self.0.seal_in_place_append_tag(nonce, aad, buf).unwrap(); // unique nonce
-        buf.extend(&nonce_buf);
+        buf.extend(nonce_buf);
         Ok(())
     }
 }
