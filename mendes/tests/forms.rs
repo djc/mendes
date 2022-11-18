@@ -24,7 +24,7 @@ fn test_roundtrip() {
         test: true,
         options: Options::Straight,
         #[cfg(feature = "chrono")]
-        date: chrono::Utc::today().naive_utc(),
+        date: chrono::Utc::now().date_naive(),
     };
     let s = serde_urlencoded::to_string(&obj).unwrap();
     let decoded = serde_urlencoded::from_bytes(s.as_bytes()).unwrap();
