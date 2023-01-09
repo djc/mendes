@@ -63,6 +63,16 @@ pub trait Application: Send + Sized {
         <Self::RequestBody as HttpBody>::Data: Send,
         <Self::RequestBody as HttpBody>::Error: Into<Box<dyn StdError + Sync + Send>>,
     {
+        // Check if the Content-Length header suggests the body is larger than our max len
+        // to avoid allocation if we drop the request in any case.
+        let expected_len = match body.size_hint().upper() {
+            Some(length) => length,
+            None => body.size_hint().lower(),
+        };
+        if expected_len > max_len as u64 {
+            return Err(Error::BodyTooLarge);
+        }
+
         from_body::<Self::RequestBody, T>(req, body, max_len).await
     }
 
@@ -74,6 +84,16 @@ pub trait Application: Send + Sized {
         <B as HttpBody>::Data: Send,
         B::Error: Into<Box<dyn StdError + Sync + Send + 'static>>,
     {
+        // Check if the Content-Length header suggests the body is larger than our max len
+        // to avoid allocation if we drop the request in any case.
+        let expected_len = match body.size_hint().upper() {
+            Some(length) => length,
+            None => body.size_hint().lower(),
+        };
+        if expected_len > max_len as u64 {
+            return Err(Error::BodyTooLarge);
+        }
+
         Ok(to_bytes(body, max_len).await?)
     }
 
