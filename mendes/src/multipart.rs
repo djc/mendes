@@ -2,11 +2,11 @@ use std::fmt::{self, Display};
 use std::str::{self, FromStr};
 
 use http::HeaderMap;
+use memchr::memmem;
 use serde::de::{
     DeserializeSeed, EnumAccess, Error as ErrorTrait, MapAccess, VariantAccess, Visitor,
 };
 use serde::Deserialize;
-use twoway::find_bytes;
 
 pub fn from_form_data<'a, T: Deserialize<'a>>(
     headers: &HeaderMap,
@@ -17,7 +17,7 @@ pub fn from_form_data<'a, T: Deserialize<'a>>(
         .ok_or_else(|| Error::custom("content-type header not found"))?
         .as_bytes();
     let split =
-        find_bytes(ctype, b"; boundary=").ok_or_else(|| Error::custom("boundary not found"))?;
+        memmem::find(ctype, b"; boundary=").ok_or_else(|| Error::custom("boundary not found"))?;
 
     let mut boundary = Vec::with_capacity(2 + ctype.len() - split - 11);
     boundary.extend(b"--");
@@ -461,7 +461,7 @@ impl<'a> Part<'a> {
             }
         }
 
-        let (len, data) = if let Some(pos) = find_bytes(bytes, boundary) {
+        let (len, data) = if let Some(pos) = memmem::find(bytes, boundary) {
             (pos, &bytes[header_len..pos - 2])
         } else {
             (bytes.len(), &bytes[header_len..])
