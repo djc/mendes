@@ -295,3 +295,9 @@ impl std::ops::Deref for ClientAddr {
         &self.0
     }
 }
+
+impl From<SocketAddr> for ClientAddr {
+    fn from(addr: SocketAddr) -> Self {
+        Self(addr)
+    }
+}
