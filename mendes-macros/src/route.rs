@@ -120,7 +120,7 @@ where
         let rtype = &ast.sig.output;
         let where_clause = &ast.sig.generics.where_clause;
         quote!(
-            #nested_vis async fn handler#generics(
+            #nested_vis async fn handler #generics(
                 cx: &mut mendes::application::Context<#app_type>
             ) #rtype #where_clause {
                 match &cx.req.method {

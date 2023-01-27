@@ -314,7 +314,7 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
         Span::call_site(),
     );
     let mut impls = quote!(
-        impl#orig_impl_generics mendes::models::ModelMeta for #name#type_generics #where_clause {
+        impl #orig_impl_generics mendes::models::ModelMeta for #name #type_generics #where_clause {
             type PrimaryKey = #pkey_ty;
             type Expression = #expr_type_name;
             type Builder = #builder_state_start;
@@ -330,7 +330,7 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
 
         }
 
-        impl#impl_generics mendes::models::Model<Sys> for #name#type_generics #where_clause #bounds {
+        impl #impl_generics mendes::models::Model<Sys> for #name #type_generics #where_clause #bounds {
             fn table() -> mendes::models::Table {
                 mendes::models::Table {
                     name: #table_name.into(),
@@ -481,7 +481,7 @@ fn enum_type(ty: &syn::ItemEnum) -> proc_macro2::TokenStream {
     let (impl_generics, type_generics, where_clause) = ty.generics.split_for_impl();
 
     quote!(
-        impl#impl_generics mendes::models::EnumType for #name#type_generics #where_clause {
+        impl #impl_generics mendes::models::EnumType for #name #type_generics #where_clause {
             const NAME: &'static str = #name_str;
             const VARIANTS: &'static [&'static str] = &[#variants];
         }
