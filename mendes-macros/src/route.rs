@@ -93,7 +93,7 @@ where
 
         let name = match pat {
             syn::Pat::Wild(_) => syn::Pat::Ident(syn::PatIdent {
-                ident: Ident::new(&format!("_{}", i), Span::call_site()),
+                ident: Ident::new(&format!("_{i}"), Span::call_site()),
                 attrs: Vec::new(),
                 mutability: None,
                 subpat: None,
@@ -201,7 +201,7 @@ pub fn route(ast: &mut syn::ExprMatch) {
             let ty = match &call.method {
                 id if id == "path" => RouteType::Path,
                 id if id == "method" => RouteType::Method,
-                m => panic!("unroutable method {:?}", m),
+                m => panic!("unroutable method {m:?}"),
             };
 
             let cx = match &*call.receiver {

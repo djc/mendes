@@ -57,27 +57,27 @@ impl fmt::Display for Form {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(fmt, "<form")?;
         if let Some(s) = &self.action {
-            write!(fmt, r#" action="{}""#, s)?;
+            write!(fmt, r#" action="{s}""#)?;
         }
         if let Some(s) = &self.enctype {
-            write!(fmt, r#" enctype="{}""#, s)?;
+            write!(fmt, r#" enctype="{s}""#)?;
         }
         if let Some(s) = &self.method {
-            write!(fmt, r#" method="{}""#, s)?;
+            write!(fmt, r#" method="{s}""#)?;
         }
         if !self.classes.is_empty() {
             write!(fmt, r#" class=""#)?;
             for (i, s) in self.classes.iter().enumerate() {
                 match i {
-                    0 => write!(fmt, "{}", s)?,
-                    _ => write!(fmt, " {}", s)?,
+                    0 => write!(fmt, "{s}")?,
+                    _ => write!(fmt, " {s}")?,
                 }
             }
             write!(fmt, "\"")?;
         }
         write!(fmt, ">")?;
         for set in &self.sets {
-            write!(fmt, "{}", set)?;
+            write!(fmt, "{set}")?;
         }
         write!(fmt, "</form>")
     }
@@ -92,10 +92,10 @@ impl fmt::Display for FieldSet {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(fmt, "<fieldset>")?;
         if let Some(s) = self.legend {
-            write!(fmt, "<legend>{}</legend>", s)?;
+            write!(fmt, "<legend>{s}</legend>")?;
         }
         for item in &self.items {
-            write!(fmt, "{}", item)?;
+            write!(fmt, "{item}")?;
         }
         write!(fmt, "</fieldset>")
     }
@@ -206,11 +206,11 @@ pub enum ItemContents {
 impl fmt::Display for ItemContents {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ItemContents::Single(f) => write!(fmt, "{}", f),
+            ItemContents::Single(f) => write!(fmt, "{f}"),
             ItemContents::Multi(items) => {
                 write!(fmt, r#"<div class="compound-item">"#)?;
                 for item in items {
-                    write!(fmt, "{}", item)?;
+                    write!(fmt, "{item}")?;
                 }
                 write!(fmt, "</div>")
             }
@@ -253,16 +253,16 @@ impl fmt::Display for Field {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         use Field::*;
         match self {
-            Checkbox(f) => write!(fmt, "{}", f),
-            Date(f) => write!(fmt, "{}", f),
-            Email(f) => write!(fmt, "{}", f),
-            File(f) => write!(fmt, "{}", f),
-            Hidden(f) => write!(fmt, "{}", f),
-            Number(f) => write!(fmt, "{}", f),
-            Password(f) => write!(fmt, "{}", f),
-            Select(f) => write!(fmt, "{}", f),
-            Submit(f) => write!(fmt, "{}", f),
-            Text(f) => write!(fmt, "{}", f),
+            Checkbox(f) => write!(fmt, "{f}"),
+            Date(f) => write!(fmt, "{f}"),
+            Email(f) => write!(fmt, "{f}"),
+            File(f) => write!(fmt, "{f}"),
+            Hidden(f) => write!(fmt, "{f}"),
+            Number(f) => write!(fmt, "{f}"),
+            Password(f) => write!(fmt, "{f}"),
+            Select(f) => write!(fmt, "{f}"),
+            Submit(f) => write!(fmt, "{f}"),
+            Text(f) => write!(fmt, "{f}"),
         }
     }
 }
@@ -295,7 +295,7 @@ impl fmt::Display for Date {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(fmt, r#"<input type="date" name="{}""#, self.name)?;
         if let Some(s) = &self.value {
-            write!(fmt, r#" value="{}""#, s)?;
+            write!(fmt, r#" value="{s}""#)?;
         }
         write!(fmt, ">")
     }
@@ -310,7 +310,7 @@ impl fmt::Display for Email {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(fmt, r#"<input type="email" name="{}""#, self.name)?;
         if let Some(s) = &self.value {
-            write!(fmt, r#" value="{}""#, s)?;
+            write!(fmt, r#" value="{s}""#)?;
         }
         write!(fmt, ">")
     }
@@ -341,7 +341,7 @@ impl fmt::Display for Hidden {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(fmt, r#"<input type="hidden" name="{}""#, self.name)?;
         if let Some(s) = &self.value {
-            write!(fmt, r#" value="{}""#, s)?;
+            write!(fmt, r#" value="{s}""#)?;
         }
         write!(fmt, ">")
     }
@@ -356,7 +356,7 @@ impl fmt::Display for Number {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(fmt, r#"<input type="number" name="{}""#, self.name)?;
         if let Some(s) = &self.value {
-            write!(fmt, r#" value="{}""#, s)?;
+            write!(fmt, r#" value="{s}""#)?;
         }
         write!(fmt, ">")
     }
@@ -371,7 +371,7 @@ impl fmt::Display for Password {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(fmt, r#"<input type="password" name="{}""#, self.name)?;
         if let Some(s) = &self.value {
-            write!(fmt, r#" value="{}""#, s)?;
+            write!(fmt, r#" value="{s}""#)?;
         }
         write!(fmt, ">")
     }
@@ -386,7 +386,7 @@ impl fmt::Display for Select {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(fmt, r#"<select name="{}">"#, &self.name)?;
         for opt in &self.options {
-            write!(fmt, "{}", opt)?;
+            write!(fmt, "{opt}")?;
         }
         write!(fmt, "</select>")
     }
@@ -420,7 +420,7 @@ impl fmt::Display for Submit {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(fmt, r#"<input type="submit""#)?;
         if let Some(s) = &self.value {
-            write!(fmt, r#" value="{}""#, s)?;
+            write!(fmt, r#" value="{s}""#)?;
         }
         write!(fmt, ">")
     }
@@ -435,7 +435,7 @@ impl fmt::Display for Text {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(fmt, r#"<input type="text" name="{}""#, self.name)?;
         if let Some(s) = &self.value {
-            write!(fmt, r#" value="{}""#, s)?;
+            write!(fmt, r#" value="{s}""#)?;
         }
         write!(fmt, ">")
     }

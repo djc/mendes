@@ -23,7 +23,7 @@ impl fmt::Display for Table {
         for col in self.columns.iter() {
             if let Some(def) = &col.type_def {
                 if defined.insert(&col.ty) {
-                    write!(fmt, "{};\n\n", def)?;
+                    write!(fmt, "{def};\n\n")?;
                 }
             }
         }
@@ -33,10 +33,10 @@ impl fmt::Display for Table {
             if i > 0 {
                 write!(fmt, ",")?;
             }
-            write!(fmt, "\n    {}", col)?;
+            write!(fmt, "\n    {col}")?;
         }
         for constraint in self.constraints.iter() {
-            write!(fmt, ",\n    {}", constraint)?;
+            write!(fmt, ",\n    {constraint}")?;
         }
         write!(fmt, "\n)")
     }
@@ -62,7 +62,7 @@ impl fmt::Display for Column {
             write!(fmt, " UNIQUE")?;
         }
         if let Some(val) = &self.default {
-            write!(fmt, " DEFAULT {}", val)?;
+            write!(fmt, " DEFAULT {val}")?;
         }
         Ok(())
     }
@@ -91,29 +91,29 @@ impl fmt::Display for Constraint {
                 ref_table,
                 ref_columns,
             } => {
-                write!(fmt, "CONSTRAINT \"{}\" FOREIGN KEY (", name)?;
+                write!(fmt, "CONSTRAINT \"{name}\" FOREIGN KEY (")?;
                 for (i, col) in columns.iter().enumerate() {
                     if i > 0 {
                         write!(fmt, ", ")?;
                     }
-                    write!(fmt, "\"{}\"", col)?;
+                    write!(fmt, "\"{col}\"")?;
                 }
-                write!(fmt, ") REFERENCES \"{}\" (", ref_table)?;
+                write!(fmt, ") REFERENCES \"{ref_table}\" (")?;
                 for (i, col) in ref_columns.iter().enumerate() {
                     if i > 0 {
                         write!(fmt, ", ")?;
                     }
-                    write!(fmt, "\"{}\"", col)?;
+                    write!(fmt, "\"{col}\"")?;
                 }
                 write!(fmt, ")")
             }
             Constraint::PrimaryKey { name, columns } => {
-                write!(fmt, "CONSTRAINT \"{}\" PRIMARY KEY (", name)?;
+                write!(fmt, "CONSTRAINT \"{name}\" PRIMARY KEY (")?;
                 for (i, col) in columns.iter().enumerate() {
                     if i > 0 {
                         write!(fmt, ", ")?;
                     }
-                    write!(fmt, "\"{}\"", col)?;
+                    write!(fmt, "\"{col}\"")?;
                 }
                 write!(fmt, ")")
             }

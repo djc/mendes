@@ -98,7 +98,7 @@ async fn basic() {
 
 fn path_request(path: &str) -> Request<()> {
     Request::builder()
-        .uri(format!("https://example.com{}", path))
+        .uri(format!("https://example.com{path}"))
         .body(())
         .unwrap()
 }
@@ -148,7 +148,7 @@ async fn scoped(cx: &mut Context<App>) -> Response<String> {
 async fn with_query(_: &App, #[query] query: Query<'_>) -> Result<Response<String>, Error> {
     Ok(Response::builder()
         .status(StatusCode::OK)
-        .body(format!("query: {:?}", query))
+        .body(format!("query: {query:?}"))
         .unwrap())
 }
 
@@ -164,7 +164,7 @@ struct Query<'a> {
 async fn nested_rest(_: &App, #[rest] path: Cow<'_, str>) -> Result<Response<String>, Error> {
     Ok(Response::builder()
         .status(StatusCode::OK)
-        .body(format!("nested rest {}", path))
+        .body(format!("nested rest {path}"))
         .unwrap())
 }
 
@@ -172,7 +172,7 @@ async fn nested_rest(_: &App, #[rest] path: Cow<'_, str>) -> Result<Response<Str
 async fn nested_right(_: &App, num: usize) -> Result<Response<String>, Error> {
     Ok(Response::builder()
         .status(StatusCode::OK)
-        .body(format!("nested right {}", num))
+        .body(format!("nested right {num}"))
         .unwrap())
 }
 
@@ -180,7 +180,7 @@ async fn nested_right(_: &App, num: usize) -> Result<Response<String>, Error> {
 async fn numbered(_: &App, num: usize) -> Result<Response<String>, Error> {
     Ok(Response::builder()
         .status(StatusCode::OK)
-        .body(format!("ID = {}", num))
+        .body(format!("ID = {num}"))
         .unwrap())
 }
 
@@ -188,7 +188,7 @@ async fn numbered(_: &App, num: usize) -> Result<Response<String>, Error> {
 async fn named(_: &App, name: String) -> Result<Response<String>, Error> {
     Ok(Response::builder()
         .status(StatusCode::OK)
-        .body(format!("Hello, {}", name))
+        .body(format!("Hello, {name}"))
         .unwrap())
 }
 
