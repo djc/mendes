@@ -7,7 +7,8 @@ repository = "https://github.com/djc/mendes"
 keywords = ["web", "http", "server", "async"]
 categories = ["asynchronous", "web-programming::http-server"]
 license = "MIT OR Apache-2.0"
-edition = "2018"
+edition = "2021"
+rust-version = "1.58"
 workspace = ".."
 readme = "../README.md"
 

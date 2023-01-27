@@ -6,7 +6,8 @@ documentation = "https://docs.rs/mendes-macros"
 repository = "https://github.com/djc/mendes"
 license = "MIT OR Apache-2.0"
 workspace = ".."
-edition = "2018"
+edition = "2021"
+rust-version = "1.58"
 
 [lib]
 proc-macro = true

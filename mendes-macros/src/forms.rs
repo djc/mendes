@@ -132,7 +132,7 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
     let name = &ast.ident;
     let (impl_generics, type_generics, where_clause) = &ast.generics.split_for_impl();
     let display = quote!(
-        impl#impl_generics mendes::forms::ToForm for #name#type_generics #where_clause {
+        impl #impl_generics mendes::forms::ToForm for #name #type_generics #where_clause {
             fn to_form() -> mendes::forms::Form {
                 mendes::forms::Form {
                     action: #action,
