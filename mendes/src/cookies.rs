@@ -195,7 +195,7 @@ fn cookie<T: CookieData>(value: Option<&str>) -> Result<HeaderValue, Error> {
     };
 
     if let Some(domain) = T::domain() {
-        write!(s, "; Domain={}", domain).unwrap();
+        write!(s, "; Domain={domain}").unwrap();
     }
 
     if T::http_only() {
@@ -203,7 +203,7 @@ fn cookie<T: CookieData>(value: Option<&str>) -> Result<HeaderValue, Error> {
     }
 
     if let Some(same_site) = T::same_site() {
-        write!(s, "; SameSite={:?}", same_site).unwrap();
+        write!(s, "; SameSite={same_site:?}").unwrap();
     }
 
     if T::secure() {

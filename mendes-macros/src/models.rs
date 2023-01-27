@@ -75,7 +75,7 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
                     let value = inner.value();
                     match value.ends_with(')') {
                         true => value,
-                        false => format!("'{}'", value),
+                        false => format!("'{value}'"),
                     }
                 }
                 syn::Lit::ByteStr(_) => todo!(),
@@ -181,7 +181,7 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
     };
 
     let pkey_ty = if let Some((name, ty)) = pkey {
-        let cname = format!("{}_pkey", table_name);
+        let cname = format!("{table_name}_pkey");
         let name = format!("{}", name.as_ref().unwrap());
         constraints.extend(quote!(
             mendes::models::Constraint::PrimaryKey {
@@ -205,7 +205,7 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
         bounds.insert(quote!(#pkey_ty: mendes::models::ModelType<Sys>).to_string());
         pkey_ty
     } else if let Some(ty) = id_type {
-        let cname = format!("{}_pkey", table_name);
+        let cname = format!("{table_name}_pkey");
         constraints.extend(quote!(
             mendes::models::Constraint::PrimaryKey {
                 name: #cname.into(),
@@ -228,7 +228,7 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
         bounds.insert(quote!(#pkey_ty: mendes::models::ModelType<Sys>).to_string());
         pkey_ty
     } else {
-        panic!("no primary key found for type {:?}", name);
+        panic!("no primary key found for type {name:?}");
     };
 
     let bounds = bounds.iter().enumerate().fold(
@@ -306,13 +306,11 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
         }
     }
 
-    let builder_state_start = syn::Ident::new(&format!("{}State0", name), Span::call_site());
-    let expr_type_name = syn::Ident::new(&format!("{}Expression", name), Span::call_site());
+    let builder_state_start = syn::Ident::new(&format!("{name}State0"), Span::call_site());
+    let expr_type_name = syn::Ident::new(&format!("{name}Expression"), Span::call_site());
     let orig_impl_generics = ast.generics.split_for_impl().0;
-    let insert_state_name = syn::Ident::new(
-        &format!("{}State{}", name, required_fields),
-        Span::call_site(),
-    );
+    let insert_state_name =
+        syn::Ident::new(&format!("{name}State{required_fields}"), Span::call_site());
     let mut impls = quote!(
         impl #orig_impl_generics mendes::models::ModelMeta for #name #type_generics #where_clause {
             type PrimaryKey = #pkey_ty;
@@ -361,7 +359,7 @@ pub fn model(ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
 
     let mut seen = 0;
     for i in 0..(required_fields + 1) {
-        let state_name = syn::Ident::new(&format!("{}State{}", name, i), Span::call_site());
+        let state_name = syn::Ident::new(&format!("{name}State{i}"), Span::call_site());
         let required = builder_fields[seen..]
             .iter()
             .position(|(_, _, required)| *required);

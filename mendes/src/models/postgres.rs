@@ -85,11 +85,11 @@ where
 
         Column {
             name,
-            ty: format!("\"{}\"", ty_name).into(),
+            ty: format!("\"{ty_name}\"").into(),
             null: false,
             unique,
             default,
-            type_def: Some(format!("CREATE TYPE \"{}\" AS ENUM({})", ty_name, variant_str).into()),
+            type_def: Some(format!("CREATE TYPE \"{ty_name}\" AS ENUM({variant_str})").into()),
         }
     }
 }

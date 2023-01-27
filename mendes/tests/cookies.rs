@@ -35,7 +35,7 @@ async fn cookie() {
 
 fn path_request(path: &str) -> Request<()> {
     Request::builder()
-        .uri(format!("https://example.com{}", path))
+        .uri(format!("https://example.com{path}"))
         .body(())
         .unwrap()
 }

@@ -20,7 +20,7 @@ async fn test_json_decode() {
 fn path_request(path: &str, body: &str) -> Request<Body> {
     Request::builder()
         .method(Method::POST)
-        .uri(format!("https://example.com{}", path))
+        .uri(format!("https://example.com{path}"))
         .header("Content-Type", "application/json; charset=utf-8")
         .body(body.to_owned().into())
         .unwrap()

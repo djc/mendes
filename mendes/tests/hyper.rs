@@ -43,7 +43,7 @@ async fn test_client_addr() {
     let addr = "127.0.0.1:12345".parse::<SocketAddr>().unwrap();
     let runner = ServerRunner::run(addr).await;
 
-    let rsp = reqwest::get(format!("http://{}/client-addr", addr))
+    let rsp = reqwest::get(format!("http://{addr}/client-addr"))
         .await
         .unwrap();
     assert_eq!(rsp.status(), StatusCode::OK);
