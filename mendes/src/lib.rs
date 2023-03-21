@@ -35,12 +35,6 @@ pub mod utils;
 /// Optional features that require hyper
 pub mod hyper;
 
-#[doc(hidden)]
-#[cfg(feature = "models")]
-#[cfg_attr(docsrs, doc(cfg(feature = "models")))]
-/// A nascent attempt at a Rusty ORM
-pub mod models;
-
 #[cfg(feature = "uploads")]
 mod multipart;
 

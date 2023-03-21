@@ -6,7 +6,6 @@ use syn::parse_macro_input;
 
 mod cookies;
 mod forms;
-mod models;
 mod route;
 mod util;
 
@@ -106,22 +105,4 @@ pub fn route(item: TokenStream) -> TokenStream {
 pub fn derive_to_field(item: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(item as syn::DeriveInput);
     TokenStream::from(forms::to_field(ast))
-}
-
-#[proc_macro_attribute]
-pub fn model(_: TokenStream, item: TokenStream) -> TokenStream {
-    let mut ast = parse_macro_input!(item as syn::ItemStruct);
-    let impls = models::model(&mut ast);
-    let mut tokens = ast.to_token_stream();
-    tokens.extend(impls);
-    TokenStream::from(tokens)
-}
-
-#[proc_macro_attribute]
-pub fn model_type(_: TokenStream, item: TokenStream) -> TokenStream {
-    let mut ast = parse_macro_input!(item as syn::Item);
-    let impls = models::model_type(&mut ast);
-    let mut tokens = ast.to_token_stream();
-    tokens.extend(impls);
-    TokenStream::from(tokens)
 }
