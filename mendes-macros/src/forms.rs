@@ -29,9 +29,15 @@ pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStr
             .attrs
             .iter_mut()
             .enumerate()
-            .find(|(_, a)| a.path.is_ident("form"))
+            .find(|(_, a)| a.path().is_ident("form"))
         {
-            let input = mem::replace(&mut attr.tokens, proc_macro2::TokenStream::new());
+            let input = match &mut attr.meta {
+                syn::Meta::List(list) => {
+                    mem::replace(&mut list.tokens, proc_macro2::TokenStream::new())
+                }
+                _ => panic!("expected list in form attribute"),
+            };
+
             let mut tokens = proc_macro2::TokenStream::new();
             for (key, value) in syn::parse2::<FieldParams>(input).unwrap().params {
                 if key == "type" && value == "hidden" {
@@ -165,22 +171,30 @@ impl Parse for FormMeta {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let (mut action, mut submit, mut classes) = (None, None, quote!(vec![]));
         for field in Punctuated::<syn::MetaNameValue, Comma>::parse_terminated(input)? {
+            let value = match field.value {
+                syn::Expr::Lit(v) => v,
+                _ => panic!(
+                    "expected literal value for key {:?}",
+                    field.path.to_token_stream()
+                ),
+            };
+
             if field.path.is_ident("action") {
-                match field.lit {
+                match value.lit {
                     syn::Lit::Str(v) => {
                         action = Some(v.value());
                     }
                     _ => panic!("expected string value for key 'action'"),
                 }
             } else if field.path.is_ident("submit") {
-                match field.lit {
+                match value.lit {
                     syn::Lit::Str(v) => {
                         submit = Some(v.value());
                     }
                     _ => panic!("expected string value for key 'submit'"),
                 }
             } else if field.path.is_ident("class") {
-                match field.lit {
+                match value.lit {
                     syn::Lit::Str(v) => {
                         let val = v.value();
                         let iter = val.split(' ');
@@ -218,9 +232,15 @@ pub fn to_field(mut ast: syn::DeriveInput) -> proc_macro2::TokenStream {
             .attrs
             .iter_mut()
             .enumerate()
-            .find(|(_, a)| a.path.is_ident("option"))
+            .find(|(_, a)| a.path().is_ident("option"))
         {
-            let input = mem::replace(&mut attr.tokens, proc_macro2::TokenStream::new());
+            let input = match &mut attr.meta {
+                syn::Meta::List(list) => {
+                    mem::replace(&mut list.tokens, proc_macro2::TokenStream::new())
+                }
+                _ => panic!("expected list in form attribute"),
+            };
+
             let params = syn::parse2::<FieldParams>(input).unwrap().params;
             variant.attrs.remove(i);
             params
