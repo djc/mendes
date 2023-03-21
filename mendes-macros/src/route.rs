@@ -61,7 +61,7 @@ where
         let mut special = false;
         let (pat, ty) = (&*typed.pat, &typed.ty);
         typed.attrs.retain(|attr| {
-            if attr.path.is_ident("rest") {
+            if attr.path().is_ident("rest") {
                 prefix.extend(quote!(
                     let #pat = <mendes::application::Rest<#ty> as mendes::FromContext<#app_type>>::from_context(
                         &cx.app, &cx.req, &mut cx.path, &mut cx.body,
@@ -71,7 +71,7 @@ where
                 done = true;
                 special = true;
                 false
-            } else if attr.path.is_ident("query") {
+            } else if attr.path().is_ident("query") {
                 prefix.extend(quote!(
                     let #pat = <mendes::application::Query<#ty> as mendes::FromContext<#app_type>>::from_context(
                         &cx.app, &cx.req, &mut cx.path, &mut cx.body,
@@ -148,7 +148,7 @@ where
 
 fn nested_visibility(vis: syn::Visibility) -> syn::Visibility {
     match vis {
-        cur @ syn::Visibility::Crate(_) | cur @ syn::Visibility::Public(_) => cur,
+        cur @ syn::Visibility::Public(_) => cur,
         syn::Visibility::Inherited => visibility("super"),
         cur @ syn::Visibility::Restricted(_) => {
             let inner = match &cur {
@@ -156,7 +156,9 @@ fn nested_visibility(vis: syn::Visibility) -> syn::Visibility {
                 _ => unreachable!(),
             };
 
-            if inner.path.is_ident("self") {
+            if inner.path.is_ident("crate") {
+                visibility("crate")
+            } else if inner.path.is_ident("self") {
                 visibility("super")
             } else if inner.path.is_ident("super") {
                 visibility("super::super")
@@ -168,17 +170,8 @@ fn nested_visibility(vis: syn::Visibility) -> syn::Visibility {
 }
 
 fn visibility(path: &str) -> syn::Visibility {
-    syn::Visibility::Restricted(syn::VisRestricted {
-        pub_token: syn::Token![pub](Span::call_site()),
-        paren_token: syn::token::Paren {
-            span: Span::call_site(),
-        },
-        in_token: match path {
-            "self" | "crate" | "super" => None,
-            _ => Some(syn::Token![in](Span::call_site())),
-        },
-        path: Box::new(Ident::new(path, Span::call_site()).into()),
-    })
+    let path = Ident::new(path, Span::call_site());
+    parse_quote!(pub(in #path))
 }
 
 pub fn scope(mut ast: syn::ItemFn) -> TokenStream {

@@ -69,20 +69,28 @@ impl Parse for CookieMeta {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut new = CookieMeta::default();
         for field in Punctuated::<syn::MetaNameValue, Comma>::parse_terminated(input)? {
+            let value = match field.value {
+                syn::Expr::Lit(v) => v,
+                _ => panic!(
+                    "expected literal value for key {:?}",
+                    field.path.to_token_stream()
+                ),
+            };
+
             if field.path.is_ident("domain") {
-                match field.lit {
+                match value.lit {
                     syn::Lit::Str(v) => new.domain = Some(v.value()),
                     _ => panic!("expected string value for key 'domain'"),
                 }
             } else if field.path.is_ident("http_only") {
-                match field.lit {
+                match value.lit {
                     syn::Lit::Bool(v) => {
                         new.http_only = v.value();
                     }
                     _ => panic!("expected string value for key 'http_only'"),
                 }
             } else if field.path.is_ident("max_age") {
-                match field.lit {
+                match value.lit {
                     syn::Lit::Int(v) => {
                         new.max_age = v
                             .base10_parse::<u32>()
@@ -91,12 +99,12 @@ impl Parse for CookieMeta {
                     _ => panic!("expected string value for key 'max_age'"),
                 }
             } else if field.path.is_ident("path") {
-                match field.lit {
+                match value.lit {
                     syn::Lit::Str(v) => new.path = v.value(),
                     _ => panic!("expected string value for key 'path'"),
                 }
             } else if field.path.is_ident("same_site") {
-                match field.lit {
+                match value.lit {
                     syn::Lit::Str(v) => {
                         let value = v.value();
                         new.same_site = Some(match value.as_str() {
@@ -109,7 +117,7 @@ impl Parse for CookieMeta {
                     _ => panic!("expected string value for key 'same_site'"),
                 }
             } else if field.path.is_ident("secure") {
-                match field.lit {
+                match value.lit {
                     syn::Lit::Bool(v) => {
                         new.secure = v.value();
                     }
