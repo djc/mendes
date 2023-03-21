@@ -6,8 +6,6 @@ use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
 
-use crate::util::FieldParams;
-
 pub fn form(meta: &FormMeta, ast: &mut syn::ItemStruct) -> proc_macro2::TokenStream {
     let fields = match &mut ast.fields {
         syn::Fields::Named(fields) => fields,
@@ -281,6 +279,33 @@ pub fn to_field(mut ast: syn::DeriveInput) -> proc_macro2::TokenStream {
             }
         }
     )
+}
+
+pub struct FieldParams {
+    pub params: Vec<(String, String)>,
+}
+
+impl Parse for FieldParams {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        Ok(Self {
+            params: Punctuated::<syn::Meta, Comma>::parse_terminated(input)?
+                .into_iter()
+                .map(|meta| match meta {
+                    syn::Meta::NameValue(meta) => {
+                        let key = meta.path.get_ident().unwrap().to_string();
+                        let value = meta.value.into_token_stream().to_string();
+                        let value = value.trim_matches('"').to_string();
+                        (key, value)
+                    }
+                    syn::Meta::Path(path) => {
+                        let key = path.get_ident().unwrap().to_string();
+                        (key, "true".into())
+                    }
+                    _ => unimplemented!(),
+                })
+                .collect(),
+        })
+    }
 }
 
 fn label(s: &str) -> String {
