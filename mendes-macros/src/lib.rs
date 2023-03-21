@@ -7,7 +7,6 @@ use syn::parse_macro_input;
 mod cookies;
 mod forms;
 mod route;
-mod util;
 
 #[proc_macro_attribute]
 pub fn cookie(meta: TokenStream, item: TokenStream) -> TokenStream {
