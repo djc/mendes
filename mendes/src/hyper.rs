@@ -31,6 +31,17 @@ where
             .serve(ApplicationService::new(self))
             .await
     }
+
+    async fn serve_with_graceful_shutdown(
+        self,
+        addr: &SocketAddr,
+        signal: impl Future<Output = ()> + Send,
+    ) -> Result<(), hyper::Error> {
+        hyper::Server::bind(addr)
+            .serve(ApplicationService::new(self))
+            .with_graceful_shutdown(signal)
+            .await
+    }
 }
 
 struct ApplicationService<A>(Arc<A>);
