@@ -512,6 +512,7 @@ fn from_bytes<'de, T: serde::de::Deserialize<'de>>(
 
 #[cfg(feature = "with-http-body")]
 #[cfg_attr(docsrs, doc(cfg(feature = "with-http-body")))]
+#[tracing::instrument(skip(body))]
 async fn to_bytes<B>(body: B, max_len: usize) -> Result<Bytes, Error>
 where
     B: HttpBody,
