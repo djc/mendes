@@ -67,7 +67,7 @@ mod application {
 
         fn set_cookie_header<T: CookieData>(&self, data: Option<T>) -> Result<HeaderValue, Error> {
             match data {
-                Some(data) => store(self.key(), data),
+                Some(data) => cookie::<T>(Some(&Cookie::encode(data, self.key())?)),
                 None => cookie::<T>(None),
             }
         }
@@ -144,6 +144,18 @@ where
     data: T,
 }
 
+impl<T: CookieData> Cookie<T> {
+    fn encode(data: T, key: &Key) -> Result<String, Error> {
+        let expires = SystemTime::now()
+            .checked_add(Duration::new(T::max_age() as u64, 0))
+            .ok_or(Error::ExpiryWindowTooLong)?;
+
+        let mut bytes = bincode::serialize(&Cookie { expires, data })?;
+        key.encrypt(T::NAME.as_bytes(), &mut bytes)?;
+        Ok(BASE64URL_NOPAD.encode(&bytes))
+    }
+}
+
 fn extract<T: CookieData>(key: &Key, headers: &HeaderMap) -> Option<T> {
     let cookies = headers.get("cookie")?;
     let cookies = str::from_utf8(cookies.as_ref()).ok()?;
@@ -165,17 +177,6 @@ fn extract<T: CookieData>(key: &Key, headers: &HeaderMap) -> Option<T> {
     }
 
     None
-}
-
-fn store<T: CookieData>(key: &Key, data: T) -> Result<HeaderValue, Error> {
-    let expires = SystemTime::now()
-        .checked_add(Duration::new(T::max_age() as u64, 0))
-        .ok_or(Error::ExpiryWindowTooLong)?;
-
-    let mut bytes = bincode::serialize(&Cookie { expires, data })?;
-    key.encrypt(T::NAME.as_bytes(), &mut bytes)?;
-    let value = BASE64URL_NOPAD.encode(&bytes);
-    cookie::<T>(Some(&value))
 }
 
 fn cookie<T: CookieData>(value: Option<&str>) -> Result<HeaderValue, Error> {
