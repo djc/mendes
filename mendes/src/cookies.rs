@@ -4,7 +4,7 @@ use std::str;
 use std::time::{Duration, SystemTime};
 
 use data_encoding::BASE64URL_NOPAD;
-use http::header::InvalidHeaderValue;
+use http::header::{InvalidHeaderValue, COOKIE};
 use http::{HeaderMap, HeaderValue};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
@@ -157,25 +157,32 @@ impl<T: CookieData> Cookie<T> {
 }
 
 fn extract<T: CookieData>(key: &Key, headers: &HeaderMap) -> Option<T> {
-    let cookies = headers.get("cookie")?;
-    let cookies = str::from_utf8(cookies.as_ref()).ok()?;
     let name = T::NAME;
-    for cookie in cookies.split(';') {
-        let cookie = cookie.trim_start();
-        if cookie.len() < (name.len() + 1 + NONCE_LEN + TAG_LEN)
-            || !cookie.starts_with(name)
-            || cookie.as_bytes()[name.len()] != b'='
-        {
-            continue;
-        }
+    // HTTP/2 allows for multiple cookie headers.
+    // https://datatracker.ietf.org/doc/html/rfc9113#name-compressing-the-cookie-head
+    for value in headers.get_all(COOKIE) {
+        let value = match str::from_utf8(value.as_ref()) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        // A single cookie header can contain multiple cookies (delimited by ;)
+        // even if there are multiple cookie headers.
+        for cookie in value.split(';') {
+            let cookie = cookie.trim_start();
+            if cookie.len() < (name.len() + 1 + NONCE_LEN + TAG_LEN)
+                || !cookie.starts_with(name)
+                || cookie.as_bytes()[name.len()] != b'='
+            {
+                continue;
+            }
 
-        let encoded = &cookie[name.len() + 1..];
-        match T::decode(encoded, key) {
-            Some(data) => return Some(data),
-            None => continue,
+            let encoded = &cookie[name.len() + 1..];
+            match T::decode(encoded, key) {
+                Some(data) => return Some(data),
+                None => continue,
+            }
         }
     }
-
     None
 }
 
@@ -231,4 +238,63 @@ pub enum Error {
     InvalidCookieName(#[from] InvalidHeaderValue),
     #[error("key error: {0}")]
     Key(#[from] crate::key::Error),
+}
+
+#[cfg(test)]
+mod test {
+    use http::{header, HeaderMap};
+    use serde::{Deserialize, Serialize};
+
+    use super::*;
+
+    /// This test checks that we can extract a cookie from a request that uses multiple cookies in a single header
+    #[test]
+    fn test_multiple_cookies_in_single_header() {
+        let key = crate::key::Key::from_hex_lower(
+            b"db9881d396644d64818c0bc192d161addb9881d396644d64818c0bc192d161ad",
+        )
+        .unwrap();
+        let session = Session { id: 2 };
+
+        let mut headers = HeaderMap::new();
+        let cookie_value = Cookie::encode(session, &key).unwrap();
+        let header_value = format!("_internal_s=logs=1&id=toast;Session={cookie_value};RefreshToken=tWEnTuXNfmCV_ZNYZQXvMeZ8AN5KUqas7vsqY1wwcWa6TfxYEqekcBVIpagFXn06XsHSN8GZQqGi2w1jd2Atj-aEwNq2wknQjpmxFKIMAnOYFd6gcCoG6Q").parse().unwrap();
+        headers.insert(header::COOKIE, header_value);
+
+        assert_eq!(super::extract::<Session>(&key, &headers).unwrap().id, 2);
+    }
+
+    /// This test checks that we can extract a cookie from a request that uses separate headers for each cookie
+    #[test]
+    fn test_separate_cookie_headers() {
+        let key = crate::key::Key::from_hex_lower(
+            b"db9881d396644d64818c0bc192d161addb9881d396644d64818c0bc192d161ad",
+        )
+        .unwrap();
+        let session = Session { id: 2 };
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::COOKIE,
+            "_internal_s=logs=1&id=toast;".parse().unwrap(),
+        );
+
+        let cookie_value = Cookie::encode(session, &key).unwrap();
+        headers.append(
+            header::COOKIE,
+            format!("Session={cookie_value}").parse().unwrap(),
+        );
+        headers.append(header::COOKIE, "RefreshToken=tWEnTuXNfmCV_ZNYZQXvMeZ8AN5KUqas7vsqY1wwcWa6TfxYEqekcBVIpagFXn06XsHSN8GZQqGi2w1jd2Atj-aEwNq2wknQjpmxFKIMAnOYFd6gcCoG6Q".parse().unwrap());
+
+        assert_eq!(super::extract::<Session>(&key, &headers).unwrap().id, 2);
+    }
+
+    #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+    pub struct Session {
+        id: i64,
+    }
+
+    impl super::CookieData for Session {
+        const NAME: &'static str = "Session";
+    }
 }
