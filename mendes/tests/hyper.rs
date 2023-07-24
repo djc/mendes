@@ -1,4 +1,4 @@
-#![cfg(all(feature = "hyper"))]
+#![cfg(feature = "hyper")]
 
 use std::fmt::{self, Display};
 use std::net::SocketAddr;
