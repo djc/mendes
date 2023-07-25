@@ -60,6 +60,12 @@ where
 
         let mut special = false;
         let (pat, ty) = (&*typed.pat, &typed.ty);
+        let name = match pat {
+            syn::Pat::Wild(_) => Ident::new(&format!("_{i}"), Span::call_site()),
+            syn::Pat::Ident(pat) => pat.ident.clone(),
+            _ => panic!("only identifiers and wildcards allowed in handler argument list"),
+        };
+
         typed.attrs.retain(|attr| {
             if attr.path().is_ident("rest") {
                 prefix.extend(quote!(
@@ -67,7 +73,7 @@ where
                         &cx.app, &cx.req, &mut cx.path, &mut cx.body,
                     )?.0;
                 ));
-                args.extend(quote!(#pat,));
+                args.extend(quote!(#name,));
                 done = true;
                 special = true;
                 false
@@ -77,7 +83,7 @@ where
                         &cx.app, &cx.req, &mut cx.path, &mut cx.body,
                     )?.0;
                 ));
-                args.extend(quote!(#pat,));
+                args.extend(quote!(#name,));
                 special = true;
                 false
             } else {
@@ -90,17 +96,6 @@ where
         } else if done {
             panic!("more arguments after #[rest] not allowed");
         }
-
-        let name = match pat {
-            syn::Pat::Wild(_) => syn::Pat::Ident(syn::PatIdent {
-                ident: Ident::new(&format!("_{i}"), Span::call_site()),
-                attrs: Vec::new(),
-                mutability: None,
-                subpat: None,
-                by_ref: None,
-            }),
-            _ => pat.clone(),
-        };
 
         prefix.extend(quote!(
             let #name = <#ty as mendes::FromContext<#app_type>>::from_context(
