@@ -56,17 +56,17 @@ async fn test_nested_right() {
 }
 
 #[tokio::test]
-async fn test_numbered_invalid() {
-    let rsp = handle(path_request("/numbered/Foo")).await;
+async fn test_inc_invalid() {
+    let rsp = handle(path_request("/inc/Foo")).await;
     assert_eq!(rsp.status(), StatusCode::NOT_FOUND);
     assert_eq!(rsp.into_body(), "unable to parse path component");
 }
 
 #[tokio::test]
-async fn test_numbered() {
-    let rsp = handle(path_request("/numbered/2016")).await;
+async fn test_inc() {
+    let rsp = handle(path_request("/inc/2016")).await;
     assert_eq!(rsp.status(), StatusCode::OK);
-    assert_eq!(rsp.into_body(), "ID = 2016");
+    assert_eq!(rsp.into_body(), "num = 2017");
 }
 
 #[tokio::test]
@@ -119,7 +119,7 @@ impl Application for App {
         route!(match cx.path() {
             Some("hello") => hello,
             Some("named") => named,
-            Some("numbered") => numbered,
+            Some("inc") => inc,
             Some("nested") => match cx.path() {
                 Some("right") => nested_right,
                 _ => nested_rest,
@@ -176,11 +176,12 @@ async fn nested_right(_: &App, num: usize) -> Result<Response<String>, Error> {
         .unwrap())
 }
 
-#[handler(GET)]
-async fn numbered(_: &App, num: usize) -> Result<Response<String>, Error> {
+#[handler(GET)] // use mutable argument to test this case
+async fn inc(_: &App, mut num: usize) -> Result<Response<String>, Error> {
+    num += 1;
     Ok(Response::builder()
         .status(StatusCode::OK)
-        .body(format!("ID = {num}"))
+        .body(format!("num = {num}"))
         .unwrap())
 }
 
