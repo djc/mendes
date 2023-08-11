@@ -1,14 +1,14 @@
 [package]
 name = "mendes"
 version = "0.3.2"
+edition = "2021"
+rust-version = "1.63"
 description = "Rust web toolkit for impatient perfectionists"
 documentation = "https://docs.rs/mendes"
 repository = "https://github.com/djc/mendes"
 keywords = ["web", "http", "server", "async"]
 categories = ["asynchronous", "web-programming::http-server"]
 license = "MIT OR Apache-2.0"
-edition = "2021"
-rust-version = "1.60"
 workspace = ".."
 readme = "../README.md"
 
