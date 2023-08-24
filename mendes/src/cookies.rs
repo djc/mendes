@@ -12,7 +12,6 @@ use thiserror::Error;
 use crate::key::{NONCE_LEN, TAG_LEN};
 
 pub use crate::key::Key;
-pub use bincode;
 pub use mendes_macros::cookie;
 
 #[cfg(feature = "application")]
@@ -126,7 +125,7 @@ pub trait CookieData: DeserializeOwned + Serialize {
         let mut bytes = BASE64URL_NOPAD.decode(value.as_bytes()).ok()?;
         let plain = key.decrypt(Self::NAME.as_bytes(), &mut bytes).ok()?;
 
-        let cookie = bincode::deserialize::<Cookie<Self>>(plain).ok()?;
+        let cookie = postcard::from_bytes::<Cookie<Self>>(plain).ok()?;
         match SystemTime::now() < cookie.expires {
             true => Some(cookie.data),
             false => None,
@@ -150,7 +149,7 @@ impl<T: CookieData> Cookie<T> {
             .checked_add(Duration::new(T::max_age() as u64, 0))
             .ok_or(Error::ExpiryWindowTooLong)?;
 
-        let mut bytes = bincode::serialize(&Cookie { expires, data })?;
+        let mut bytes = postcard::to_stdvec(&Cookie { expires, data })?;
         key.encrypt(T::NAME.as_bytes(), &mut bytes)?;
         Ok(BASE64URL_NOPAD.encode(&bytes))
     }
@@ -231,7 +230,7 @@ pub enum SameSite {
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("unstable to serialize cookie data")]
-    DataSerializationFailed(#[from] bincode::Error),
+    DataSerializationFailed(#[from] postcard::Error),
     #[error("expiry window too long")]
     ExpiryWindowTooLong,
     #[error("non-ASCII cookie name")]
