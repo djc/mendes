@@ -14,68 +14,111 @@ use hyper::server::conn::AddrStream;
 use hyper::service::Service;
 
 use super::Application;
-use crate::application::{Context, FromContext, PathState, Server};
+use crate::application::{Context, FromContext, PathState};
 
 pub use hyper::Body;
 
+/// Extension trait for creating a `hyper::Server`
 #[async_trait]
-impl<A> Server for A
-where
-    A: Application<RequestBody = Body, ResponseBody = Body> + Send + Sync + 'static,
-    A::Error: std::error::Error + Send + Sync,
-{
-    type ServerError = hyper::Error;
+pub trait HyperApplicationExt: Application {
+    /// Returns a `hyper::service::MakeService` compatible type limited to `AddrStream` targets
+    ///
+    /// This can be used to start a hyper server using `hyper::server::Builder::serve`.
+    ///
+    /// # Example
+    /// ```
+    /// # async fn run() {
+    /// # use hyper::Body;
+    /// # use mendes::hyper::HyperApplicationExt;
+    /// # use async_trait::async_trait;
+    /// # use std::net::ToSocketAddrs;
+    /// struct App;
 
-    async fn serve(self, addr: &SocketAddr) -> Result<(), hyper::Error> {
-        hyper::Server::bind(addr)
-            .serve(ApplicationService::new(self))
-            .await
-    }
+    /// #[async_trait]
+    /// impl mendes::Application for App {
+    ///     type RequestBody = Body;
+    ///     type ResponseBody = Body;
+    ///     type Error = mendes::Error;
 
-    async fn serve_with_graceful_shutdown(
-        self,
-        addr: &SocketAddr,
-        signal: impl Future<Output = ()> + Send,
-    ) -> Result<(), hyper::Error> {
-        hyper::Server::bind(addr)
-            .serve(ApplicationService::new(self))
-            .with_graceful_shutdown(signal)
-            .await
+    ///     async fn handle(_ctx: mendes::Context<Self>) -> http::Response<Self::ResponseBody> {
+    ///         http::Response::new(hyper::Body::empty())
+    ///     }
+    /// }
+    ///
+    /// hyper::Server::bind(&"127.0.0.1:0".to_socket_addrs().unwrap().next().unwrap())
+    ///   .serve(App.into_hyper_service());
+    /// # }
+    /// # fn main() {
+    /// # tokio::runtime::Builder::new_current_thread().enable_io().build().unwrap().block_on(async {run().await});
+    /// # }
+    /// ```
+    ///
+    /// mendes previously provided serve_with_graceful_shutdown.
+    /// To construct a server with graceful shutdown, use the following pattern:
+    ///
+    ///  ```
+    /// # async fn run() {
+    /// # use hyper::Body;
+    /// # use mendes::hyper::HyperApplicationExt;
+    /// # use async_trait::async_trait;
+    /// # use std::net::ToSocketAddrs;
+    /// struct App;
+
+    /// #[async_trait]
+    /// impl mendes::Application for App {
+    ///     type RequestBody = Body;
+    ///     type ResponseBody = Body;
+    ///     type Error = mendes::Error;
+
+    ///     async fn handle(_ctx: mendes::Context<Self>) -> http::Response<Self::ResponseBody> {
+    ///         http::Response::new(hyper::Body::empty())
+    ///     }
+    /// }
+    /// let (shutdown, signal) = tokio::sync::oneshot::channel();
+    /// hyper::Server::bind(&"127.0.0.1:0".to_socket_addrs().unwrap().next().unwrap())
+    ///   .serve(App.into_hyper_service()).with_graceful_shutdown(async {
+    ////       signal.await.ok();
+    ///    });
+    /// shutdown.send(()).unwrap()
+    /// # }
+    /// # fn main() {
+    /// # tokio::runtime::Builder::new_current_thread().enable_io().build().unwrap().block_on(async {run().await});
+    /// # }
+    /// ```
+    fn into_hyper_service(self) -> MakeServiceFn<Self>;
+}
+
+impl<T: Application> HyperApplicationExt for T {
+    fn into_hyper_service(self) -> MakeServiceFn<Self> {
+        MakeServiceFn {
+            app: Arc::new(self),
+        }
     }
 }
 
-struct ApplicationService<A>(Arc<A>);
-
-impl<A: Application<RequestBody = Body, ResponseBody = Body>> ApplicationService<A> {
-    fn new(app: A) -> Self {
-        Self(Arc::new(app))
-    }
+#[derive(Clone)]
+pub struct MakeServiceFn<A> {
+    app: Arc<A>,
 }
 
-impl<'t, A> Service<&'t AddrStream> for ApplicationService<A>
-where
-    A: Application<RequestBody = Body, ResponseBody = Body>,
-{
+impl<'t, A> Service<&'t AddrStream> for MakeServiceFn<A> {
     type Response = ConnectionService<A>;
-    type Error = hyper::Error;
+    type Error = Infallible;
     type Future = Ready<Result<Self::Response, Self::Error>>;
 
-    fn poll_ready(
-        &mut self,
-        _: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
+    fn poll_ready(&mut self, _cx: &mut std::task::Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, conn: &'t AddrStream) -> Self::Future {
+    fn call(&mut self, target: &'t AddrStream) -> Self::Future {
         ready(Ok(ConnectionService {
-            app: self.0.clone(),
-            addr: conn.remote_addr(),
+            app: self.app.clone(),
+            addr: target.remote_addr(),
         }))
     }
 }
 
-struct ConnectionService<A> {
+pub struct ConnectionService<A> {
     app: Arc<A>,
     addr: SocketAddr,
 }

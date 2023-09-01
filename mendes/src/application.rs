@@ -1,8 +1,6 @@
 use std::borrow::Cow;
 #[cfg(feature = "with-http-body")]
 use std::error::Error as StdError;
-use std::future::Future;
-use std::net::SocketAddr;
 use std::str;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -686,17 +684,4 @@ impl From<&Error> for StatusCode {
             FileNotFound => StatusCode::NOT_FOUND,
         }
     }
-}
-
-/// Extension trait for serving an `Application` on the given `SocketAddr`
-#[async_trait]
-pub trait Server: Application {
-    type ServerError;
-
-    async fn serve(self, addr: &SocketAddr) -> Result<(), Self::ServerError>;
-    async fn serve_with_graceful_shutdown(
-        self,
-        addr: &SocketAddr,
-        signal: impl Future<Output = ()> + Send,
-    ) -> Result<(), Self::ServerError>;
 }

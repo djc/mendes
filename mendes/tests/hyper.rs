@@ -1,16 +1,19 @@
 #![cfg(all(feature = "hyper"))]
 
 use std::fmt::{self, Display};
-use std::net::SocketAddr;
+use std::net::{SocketAddr, TcpListener};
 use std::time::Duration;
 
 use async_trait::async_trait;
+use hyper::server::conn::AddrIncoming;
+use hyper::server::Builder;
 use mendes::application::IntoResponse;
-use mendes::application::Server;
 use mendes::http::request::Parts;
 use mendes::http::{Response, StatusCode};
+use mendes::hyper::HyperApplicationExt;
 use mendes::hyper::{Body, ClientAddr};
 use mendes::{handler, route, Application, Context};
+use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
@@ -19,10 +22,31 @@ struct ServerRunner {
 }
 
 impl ServerRunner {
-    async fn run(addr: SocketAddr) -> Self {
+    async fn run(server: Builder<AddrIncoming>) -> Self {
         let handle = tokio::spawn(async move {
-            App::default().serve(&addr).await.unwrap();
+            server
+                .serve(App::default().into_hyper_service())
+                .await
+                .unwrap();
         });
+        sleep(Duration::from_millis(10)).await;
+        Self { handle }
+    }
+
+    async fn run_with_graceful_shutdown(
+        server: Builder<AddrIncoming>,
+        signal: oneshot::Receiver<()>,
+    ) -> Self {
+        let handle = tokio::spawn(async move {
+            server
+                .serve(App::default().into_hyper_service())
+                .with_graceful_shutdown(async {
+                    signal.await.ok();
+                })
+                .await
+                .unwrap();
+        });
+
         sleep(Duration::from_millis(10)).await;
         Self { handle }
     }
@@ -41,7 +65,7 @@ impl Drop for ServerRunner {
 #[tokio::test]
 async fn test_client_addr() {
     let addr = "127.0.0.1:12345".parse::<SocketAddr>().unwrap();
-    let runner = ServerRunner::run(addr).await;
+    let runner = ServerRunner::run(hyper::Server::bind(&addr)).await;
 
     let rsp = reqwest::get(format!("http://{addr}/client-addr"))
         .await
@@ -51,6 +75,48 @@ async fn test_client_addr() {
     let body = rsp.text().await.unwrap();
     assert_eq!(body, "client_addr: 127.0.0.1");
 
+    runner.stop();
+}
+
+#[tokio::test]
+async fn test_listener() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let runner = ServerRunner::run(hyper::Server::from_tcp(listener).unwrap()).await;
+
+    let rsp = reqwest::get(format!("http://{addr}/client-addr"))
+        .await
+        .unwrap();
+    assert_eq!(rsp.status(), StatusCode::OK);
+
+    let body = rsp.text().await.unwrap();
+    assert_eq!(body, "client_addr: 127.0.0.1");
+
+    runner.stop();
+}
+
+#[tokio::test]
+async fn test_graceful_shutdown() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (tx, rx) = oneshot::channel::<()>();
+    let runner =
+        ServerRunner::run_with_graceful_shutdown(hyper::Server::from_tcp(listener).unwrap(), rx)
+            .await;
+
+    let rsp = reqwest::get(format!("http://{addr}/client-addr"))
+        .await
+        .unwrap();
+    assert_eq!(rsp.status(), StatusCode::OK);
+
+    let body = rsp.text().await.unwrap();
+    assert_eq!(body, "client_addr: 127.0.0.1");
+    tx.send(()).unwrap();
+    sleep(Duration::from_millis(10)).await;
+    let rsp: bool = reqwest::get(format!("http://{addr}/client-addr"))
+        .await
+        .is_err();
+    assert!(rsp);
     runner.stop();
 }
 
