@@ -1,8 +1,6 @@
 use std::borrow::Cow;
 #[cfg(feature = "with-http-body")]
 use std::error::Error as StdError;
-use std::future::Future;
-use std::net::SocketAddr;
 use std::str;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -20,6 +18,9 @@ use percent_encoding::percent_decode_str;
 use thiserror::Error;
 
 pub use mendes_macros::{handler, route, scope};
+
+#[cfg(feature = "hyper")]
+use crate::hyper::ApplicationService;
 
 /// Main interface for an application or service
 ///
@@ -107,6 +108,11 @@ pub trait Application: Send + Sized {
             .header(LOCATION, path.as_ref())
             .body(Self::ResponseBody::default())
             .unwrap()
+    }
+
+    #[cfg(feature = "hyper")]
+    fn into_service(self) -> ApplicationService<Self> {
+        ApplicationService(Arc::new(self))
     }
 }
 
@@ -686,17 +692,4 @@ impl From<&Error> for StatusCode {
             FileNotFound => StatusCode::NOT_FOUND,
         }
     }
-}
-
-/// Extension trait for serving an `Application` on the given `SocketAddr`
-#[async_trait]
-pub trait Server: Application {
-    type ServerError;
-
-    async fn serve(self, addr: &SocketAddr) -> Result<(), Self::ServerError>;
-    async fn serve_with_graceful_shutdown(
-        self,
-        addr: &SocketAddr,
-        signal: impl Future<Output = ()> + Send,
-    ) -> Result<(), Self::ServerError>;
 }
