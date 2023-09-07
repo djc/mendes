@@ -6,7 +6,6 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use mendes::application::IntoResponse;
-use mendes::application::Server;
 use mendes::http::request::Parts;
 use mendes::http::{Response, StatusCode};
 use mendes::hyper::{Body, ClientAddr};
@@ -21,7 +20,10 @@ struct ServerRunner {
 impl ServerRunner {
     async fn run(addr: SocketAddr) -> Self {
         let handle = tokio::spawn(async move {
-            App::default().serve(&addr).await.unwrap();
+            hyper::Server::bind(&addr)
+                .serve(App::default().into_service())
+                .await
+                .unwrap();
         });
         sleep(Duration::from_millis(10)).await;
         Self { handle }

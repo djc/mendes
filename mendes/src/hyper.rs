@@ -6,7 +6,6 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::Poll;
 
-use async_trait::async_trait;
 use futures_util::future::{ready, CatchUnwind, FutureExt, Map, Ready};
 use http::request::Parts;
 use http::{Request, Response, StatusCode};
@@ -14,48 +13,14 @@ use hyper::server::conn::AddrStream;
 use hyper::service::Service;
 
 use super::Application;
-use crate::application::{Context, FromContext, PathState, Server};
+use crate::application::{Context, FromContext, PathState};
 
 pub use hyper::Body;
 
-#[async_trait]
-impl<A> Server for A
-where
-    A: Application<RequestBody = Body, ResponseBody = Body> + Send + Sync + 'static,
-    A::Error: std::error::Error + Send + Sync,
-{
-    type ServerError = hyper::Error;
+/// `ApplicationService` wraps an `Arc<Application>` to implement the service trait used in hyper
+pub struct ApplicationService<A>(pub(crate) Arc<A>);
 
-    async fn serve(self, addr: &SocketAddr) -> Result<(), hyper::Error> {
-        hyper::Server::bind(addr)
-            .serve(ApplicationService::new(self))
-            .await
-    }
-
-    async fn serve_with_graceful_shutdown(
-        self,
-        addr: &SocketAddr,
-        signal: impl Future<Output = ()> + Send,
-    ) -> Result<(), hyper::Error> {
-        hyper::Server::bind(addr)
-            .serve(ApplicationService::new(self))
-            .with_graceful_shutdown(signal)
-            .await
-    }
-}
-
-struct ApplicationService<A>(Arc<A>);
-
-impl<A: Application<RequestBody = Body, ResponseBody = Body>> ApplicationService<A> {
-    fn new(app: A) -> Self {
-        Self(Arc::new(app))
-    }
-}
-
-impl<'t, A> Service<&'t AddrStream> for ApplicationService<A>
-where
-    A: Application<RequestBody = Body, ResponseBody = Body>,
-{
+impl<'t, A: Application> Service<&'t AddrStream> for ApplicationService<A> {
     type Response = ConnectionService<A>;
     type Error = hyper::Error;
     type Future = Ready<Result<Self::Response, Self::Error>>;
@@ -75,16 +40,16 @@ where
     }
 }
 
-struct ConnectionService<A> {
+pub struct ConnectionService<A> {
     app: Arc<A>,
     addr: SocketAddr,
 }
 
-impl<A> Service<Request<Body>> for ConnectionService<A>
+impl<A: Application + 'static> Service<Request<A::RequestBody>> for ConnectionService<A>
 where
-    A: Application<RequestBody = Body, ResponseBody = Body> + 'static,
+    A::ResponseBody: From<&'static str>,
 {
-    type Response = Response<Body>;
+    type Response = Response<A::ResponseBody>;
     type Error = Infallible;
     type Future = UnwindSafeHandlerFuture<Self::Response, Self::Error>;
 
@@ -92,7 +57,7 @@ where
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, mut req: Request<Body>) -> Self::Future {
+    fn call(&mut self, mut req: Request<A::RequestBody>) -> Self::Future {
         req.extensions_mut().insert(ClientAddr(self.addr));
         let cx = Context::new(self.app.clone(), req);
         AssertUnwindSafe(A::handle(cx))
@@ -106,9 +71,9 @@ type UnwindSafeHandlerFuture<T, E> = Map<
     fn(Result<T, Box<(dyn std::any::Any + std::marker::Send + 'static)>>) -> Result<T, E>,
 >;
 
-fn panic_response(
-    result: Result<Response<Body>, Box<dyn std::any::Any + std::marker::Send + 'static>>,
-) -> Result<Response<Body>, Infallible> {
+fn panic_response<B: From<&'static str>>(
+    result: Result<Response<B>, Box<dyn std::any::Any + std::marker::Send + 'static>>,
+) -> Result<Response<B>, Infallible> {
     let error = match result {
         Ok(rsp) => return Ok(rsp),
         Err(e) => e,
