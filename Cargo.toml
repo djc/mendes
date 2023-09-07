@@ -1,2 +1,3 @@
 [workspace]
 members = ["mendes", "mendes-macros"]
+resolver = "2"
