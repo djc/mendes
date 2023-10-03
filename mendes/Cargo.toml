@@ -46,7 +46,7 @@ mime_guess = { version = "2.0.3", default-features = false, optional = true }
 percent-encoding = { version = "2.1.0", default-features = false, optional = true }
 pin-utils = { version = "0.1.0", optional = true }
 postcard = { version = "1.0.6", default-features = false, features = ["use-std"], optional = true }
-ring = { version = "0.16.11", optional = true }
+ring = { version = "0.17.0", optional = true }
 serde = { version = "1.0.104", optional = true }
 serde_json = { version = "1.0.48", optional = true }
 serde_urlencoded = { version = "0.7.0", optional = true }
