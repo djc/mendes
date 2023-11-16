@@ -1,51 +1,257 @@
 use std::convert::Infallible;
-use std::future::Future;
+use std::error::Error as StdError;
+use std::future::{poll_fn, Future, Pending};
+use std::io;
 use std::net::SocketAddr;
 use std::panic::AssertUnwindSafe;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::Poll;
+use std::time::Duration;
 
-use futures_util::future::{ready, CatchUnwind, FutureExt, Map, Ready};
+use futures_util::future::{CatchUnwind, FutureExt, Map};
+use futures_util::pin_mut;
 use http::request::Parts;
 use http::{Request, Response, StatusCode};
-use hyper::server::conn::AddrStream;
+use hyper::body::{Body, Incoming};
 use hyper::service::Service;
+use hyper_util::rt::{TokioExecutor, TokioIo};
+use hyper_util::server::conn::auto::Builder;
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::watch;
+use tokio::time::sleep;
+use tracing::{debug, error, info, trace};
 
 use super::Application;
 use crate::application::{Context, FromContext, PathState};
 
-pub use hyper::Body;
+pub use hyper::body;
 
-/// `ApplicationService` wraps an `Arc<Application>` to implement the service trait used in hyper
-pub struct ApplicationService<A>(pub(crate) Arc<A>);
+pub struct Server<A, F> {
+    listener: TcpListener,
+    app: Arc<A>,
+    signal: Option<F>,
+}
 
-impl<'t, A: Application> Service<&'t AddrStream> for ApplicationService<A> {
-    type Response = ConnectionService<A>;
-    type Error = hyper::Error;
-    type Future = Ready<Result<Self::Response, Self::Error>>;
-
-    fn poll_ready(
-        &mut self,
-        _: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
+impl<A: Application> Server<A, Pending<()>> {
+    pub fn new(listener: TcpListener, app: A) -> Server<A, Pending<()>> {
+        Server {
+            listener,
+            app: Arc::new(app),
+            signal: None,
+        }
     }
+}
 
-    fn call(&mut self, conn: &'t AddrStream) -> Self::Future {
-        ready(Ok(ConnectionService {
-            app: self.0.clone(),
-            addr: conn.remote_addr(),
-        }))
+impl<A: Application> Server<A, Pending<()>> {
+    pub fn with_graceful_shutdown<F: Future<Output = ()>>(self, signal: F) -> Server<A, F> {
+        let Server { listener, app, .. } = self;
+        Server {
+            listener,
+            app,
+            signal: Some(signal),
+        }
+    }
+}
+
+impl<A, F> Server<A, F>
+where
+    A: Application<RequestBody = Incoming> + Sync + 'static,
+    <<A as Application>::ResponseBody as Body>::Data: Send,
+    <<A as Application>::ResponseBody as Body>::Error: StdError + Send + Sync,
+    <A as Application>::ResponseBody: From<&'static str> + Send,
+    F: Future<Output = ()> + Send + 'static,
+{
+    pub async fn serve(self) -> Result<(), io::Error> {
+        let Server {
+            listener,
+            app,
+            signal,
+        } = self;
+
+        let (listener_state, conn_state) = states(signal);
+        loop {
+            let (stream, addr) = tokio::select! {
+                res = listener.accept() => {
+                    match res {
+                        Ok((stream, addr)) => (stream, addr),
+                        Err(error) => {
+                            use io::ErrorKind::*;
+                            if matches!(error.kind(), ConnectionRefused | ConnectionAborted | ConnectionReset) {
+                                continue;
+                            }
+
+                            // Sleep for a bit to see if the error clears
+                            error!(%error, "error accepting connection");
+                            sleep(Duration::from_secs(1)).await;
+                            continue;
+                        }
+                    }
+                }
+                _ = listener_state.is_shutting_down() => break,
+            };
+
+            debug!("connection accepted from {addr}");
+            tokio::spawn(
+                Connection {
+                    stream,
+                    addr,
+                    state: conn_state.clone(),
+                    app: app.clone(),
+                }
+                .run(),
+            );
+        }
+
+        let ListenerState { task_monitor, .. } = listener_state;
+        drop(listener);
+        if let Some(task_monitor) = task_monitor {
+            trace!(
+                "waiting for {} task(s) to finish",
+                task_monitor.receiver_count()
+            );
+            task_monitor.closed().await;
+        }
+
+        Ok(())
+    }
+}
+
+fn states(
+    future: Option<impl Future<Output = ()> + Send + 'static>,
+) -> (ListenerState, ConnectionState) {
+    let future = match future {
+        Some(future) => future,
+        None => return (ListenerState::default(), ConnectionState::default()),
+    };
+
+    let (shutting_down, signal) = watch::channel(()); // Axum: `signal_tx`, `signal_rx`
+    let shutting_down = Arc::new(shutting_down);
+    tokio::spawn(async move {
+        future.await;
+        info!("shutdown signal received, draining...");
+        drop(signal);
+    });
+
+    let (task_monitor, task_done) = watch::channel(()); // Axum: `close_tx`, `close_rx`
+    (
+        ListenerState {
+            shutting_down: Some(shutting_down.clone()),
+            task_monitor: Some(task_monitor),
+            _task_done: Some(task_done.clone()),
+        },
+        ConnectionState {
+            shutting_down: Some(shutting_down),
+            _task_done: Some(task_done),
+        },
+    )
+}
+
+#[derive(Default)]
+struct ListenerState {
+    /// If `Some` and `closed()`, the server is shutting down
+    shutting_down: Option<Arc<watch::Sender<()>>>,
+    /// If `Some`, `receiver_count()` can be used whether any connections are still going
+    ///
+    /// Call `closed().await` to wait for all connections to finish.
+    task_monitor: Option<watch::Sender<()>>,
+    /// Given to each connection so we can monitor the number of receivers via `_task_monitor`
+    _task_done: Option<watch::Receiver<()>>,
+}
+
+impl ListenerState {
+    async fn is_shutting_down(&self) {
+        poll_fn(|cx| match &self.shutting_down {
+            Some(tx) => {
+                let future = tx.closed();
+                pin_mut!(future);
+                future.poll(cx)
+            }
+            None => Poll::Pending,
+        })
+        .await
+    }
+}
+
+struct Connection<A> {
+    stream: TcpStream,
+    addr: SocketAddr,
+    state: ConnectionState,
+    app: Arc<A>,
+}
+
+impl<A: Application<RequestBody = Incoming> + 'static> Connection<A>
+where
+    A::ResponseBody: From<&'static str> + Send,
+    <A::ResponseBody as Body>::Data: Send,
+    <A::ResponseBody as Body>::Error: StdError + Send + Sync,
+{
+    async fn run(self) {
+        let Connection {
+            stream,
+            addr,
+            state,
+            app,
+        } = self;
+
+        let service = ConnectionService { addr, app };
+
+        let builder = Builder::new(TokioExecutor::new());
+        let stream = TokioIo::new(stream);
+        let conn = builder.serve_connection_with_upgrades(stream, service);
+        pin_mut!(conn);
+
+        let shutting_down = state.is_shutting_down();
+        pin_mut!(shutting_down);
+
+        loop {
+            tokio::select! {
+                result = conn.as_mut() => {
+                    if let Err(error) = result {
+                        error!(%addr, %error, "failed to serve connection");
+                    }
+                    break;
+                }
+                _ = &mut shutting_down => {
+                    debug!("shutting down connection to {addr}");
+                    conn.as_mut().graceful_shutdown();
+                }
+            }
+        }
+
+        debug!("connection to {addr} closed");
+    }
+}
+
+#[derive(Clone, Default)]
+struct ConnectionState {
+    /// If `Some` and `closed()`, the server is shutting down; don't accept new requests
+    shutting_down: Option<Arc<watch::Sender<()>>>,
+    /// Keeping this around will allow the server to wait for the connection to finish
+    _task_done: Option<watch::Receiver<()>>,
+}
+
+impl ConnectionState {
+    async fn is_shutting_down(&self) {
+        poll_fn(|cx| match &self.shutting_down {
+            Some(tx) => {
+                let future = tx.closed().fuse();
+                pin_mut!(future);
+                future.poll(cx)
+            }
+            None => Poll::Pending,
+        })
+        .await
     }
 }
 
 pub struct ConnectionService<A> {
-    app: Arc<A>,
     addr: SocketAddr,
+    app: Arc<A>,
 }
 
-impl<A: Application + 'static> Service<Request<A::RequestBody>> for ConnectionService<A>
+impl<A: Application<RequestBody = Incoming> + 'static> Service<Request<Incoming>>
+    for ConnectionService<A>
 where
     A::ResponseBody: From<&'static str>,
 {
@@ -53,11 +259,7 @@ where
     type Error = Infallible;
     type Future = UnwindSafeHandlerFuture<Self::Response, Self::Error>;
 
-    fn poll_ready(&mut self, _: &mut std::task::Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, mut req: Request<A::RequestBody>) -> Self::Future {
+    fn call(&self, mut req: Request<A::RequestBody>) -> Self::Future {
         req.extensions_mut().insert(ClientAddr(self.addr));
         let cx = Context::new(self.app.clone(), req);
         AssertUnwindSafe(A::handle(cx))
@@ -99,15 +301,12 @@ fn panic_response<B: From<&'static str>>(
         .unwrap())
 }
 
-impl<'a, A: Application> FromContext<'a, A> for Body
-where
-    A: Application<RequestBody = Body>,
-{
+impl<'a, A: Application<RequestBody = Incoming>> FromContext<'a, A> for Incoming {
     fn from_context(
         _: &'a Arc<A>,
         _: &'a Parts,
         _: &mut PathState,
-        body: &mut Option<Body>,
+        body: &mut Option<Incoming>,
     ) -> Result<Self, A::Error> {
         match body.take() {
             Some(body) => Ok(body),
@@ -116,15 +315,12 @@ where
     }
 }
 
-impl<'a, A: Application> FromContext<'a, A> for ClientAddr
-where
-    A: Application<RequestBody = Body>,
-{
+impl<'a, A: Application> FromContext<'a, A> for ClientAddr {
     fn from_context(
         _: &'a Arc<A>,
         req: &'a Parts,
         _: &mut PathState,
-        _: &mut Option<Body>,
+        _: &mut Option<A::RequestBody>,
     ) -> Result<Self, A::Error> {
         // This is safe because we insert ClientAddr into the request extensions
         // unconditionally in the ConnectionService::call method.
@@ -132,142 +328,23 @@ where
     }
 }
 
-#[cfg(feature = "compression")]
-#[cfg_attr(docsrs, doc(cfg(feature = "compression")))]
-mod encoding {
-    use std::str::FromStr;
-    #[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
-    use std::{io, mem};
-
-    #[cfg(feature = "brotli")]
-    use async_compression::tokio::bufread::BrotliEncoder;
-    #[cfg(feature = "deflate")]
-    use async_compression::tokio::bufread::DeflateEncoder;
-    #[cfg(feature = "gzip")]
-    use async_compression::tokio::bufread::GzipEncoder;
-    #[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
-    use futures_util::stream::TryStreamExt;
-    use http::header::ACCEPT_ENCODING;
-    #[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
-    use http::header::{HeaderValue, CONTENT_ENCODING};
-    use http::request::Parts;
-    use http::Response;
-    use hyper::body::Body;
-    #[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
-    use tokio_util::codec::{BytesCodec, FramedRead};
-    #[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
-    use tokio_util::io::StreamReader;
-
-    #[allow(unused_mut)] // Depends on features
-    pub fn encode_content(req: &Parts, mut rsp: Response<Body>) -> Response<Body> {
-        let accept = match req.headers.get(ACCEPT_ENCODING).map(|hv| hv.to_str()) {
-            Some(Ok(accept)) => accept,
-            _ => return rsp,
-        };
-
-        let mut encodings = accept
-            .split(',')
-            .filter_map(|s| {
-                let mut parts = s.splitn(2, ';');
-                let alg = match Encoding::from_str(parts.next()?.trim()) {
-                    Ok(encoding) => encoding,
-                    Err(()) => return None,
-                };
-
-                let qual = parts
-                    .next()
-                    .and_then(|s| {
-                        let mut parts = s.splitn(2, '=');
-                        if parts.next()?.trim() != "q" {
-                            return None;
-                        }
-
-                        let value = parts.next()?;
-                        f64::from_str(value).ok()
-                    })
-                    .unwrap_or(1.0);
-
-                Some((alg, (qual * 100.0) as u64))
-            })
-            .collect::<Vec<_>>();
-        encodings.sort_by_key(|(algo, qual)| (-(*qual as i64), *algo));
-
-        match encodings.first().map(|v| v.0) {
-            #[cfg(feature = "brotli")]
-            Some(Encoding::Brotli) => {
-                let orig = mem::replace(rsp.body_mut(), Body::empty());
-                rsp.headers_mut()
-                    .insert(CONTENT_ENCODING, HeaderValue::from_static("br"));
-                *rsp.body_mut() = Body::wrap_stream(FramedRead::new(
-                    BrotliEncoder::new(StreamReader::new(
-                        orig.map_err(|e| io::Error::new(io::ErrorKind::Other, e)),
-                    )),
-                    BytesCodec::new(),
-                ));
-                rsp
-            }
-            #[cfg(feature = "gzip")]
-            Some(Encoding::Gzip) => {
-                rsp.headers_mut()
-                    .insert(CONTENT_ENCODING, HeaderValue::from_static("gzip"));
-                let orig = mem::replace(rsp.body_mut(), Body::empty());
-                *rsp.body_mut() = Body::wrap_stream(FramedRead::new(
-                    GzipEncoder::new(StreamReader::new(
-                        orig.map_err(|e| io::Error::new(io::ErrorKind::Other, e)),
-                    )),
-                    BytesCodec::new(),
-                ));
-                rsp
-            }
-            #[cfg(feature = "deflate")]
-            Some(Encoding::Deflate) => {
-                rsp.headers_mut()
-                    .insert(CONTENT_ENCODING, HeaderValue::from_static("deflate"));
-                let orig = mem::replace(rsp.body_mut(), Body::empty());
-                *rsp.body_mut() = Body::wrap_stream(FramedRead::new(
-                    DeflateEncoder::new(StreamReader::new(
-                        orig.map_err(|e| io::Error::new(io::ErrorKind::Other, e)),
-                    )),
-                    BytesCodec::new(),
-                ));
-                rsp
-            }
-            Some(Encoding::Identity) | None => rsp,
-        }
-    }
-
-    #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
-    enum Encoding {
-        #[cfg(feature = "brotli")]
-        Brotli,
-        #[cfg(feature = "gzip")]
-        Gzip,
-        #[cfg(feature = "deflate")]
-        Deflate,
-        Identity,
-    }
-
-    impl FromStr for Encoding {
-        type Err = ();
-
-        fn from_str(s: &str) -> Result<Encoding, ()> {
-            Ok(match s {
-                "identity" => Encoding::Identity,
-                #[cfg(feature = "gzip")]
-                "gzip" => Encoding::Gzip,
-                #[cfg(feature = "deflate")]
-                "deflate" => Encoding::Deflate,
-                #[cfg(feature = "brotli")]
-                "br" => Encoding::Brotli,
-                _ => return Err(()),
-            })
-        }
-    }
+#[derive(Debug)]
+pub struct IncomingStream<'a> {
+    tcp_stream: &'a TokioIo<TcpStream>,
+    remote_addr: SocketAddr,
 }
 
-#[cfg(feature = "compression")]
-#[cfg_attr(docsrs, doc(cfg(feature = "application")))]
-pub use encoding::encode_content;
+impl IncomingStream<'_> {
+    /// Returns the local address that this stream is bound to.
+    pub fn local_addr(&self) -> std::io::Result<SocketAddr> {
+        self.tcp_stream.inner().local_addr()
+    }
+
+    /// Returns the remote address that this stream is bound to.
+    pub fn remote_addr(&self) -> SocketAddr {
+        self.remote_addr
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct ClientAddr(SocketAddr);

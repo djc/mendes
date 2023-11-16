@@ -1,26 +1,20 @@
 use std::borrow::Cow;
-#[cfg(feature = "http-body")]
+#[cfg(feature = "body-util")]
 use std::error::Error as StdError;
-use std::str;
 use std::str::FromStr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-#[cfg(feature = "http-body")]
-use bytes::{Buf, BufMut, Bytes};
+#[cfg(feature = "body-util")]
+use bytes::Bytes;
 use http::header::LOCATION;
 use http::request::Parts;
 use http::Request;
 use http::{Response, StatusCode};
-#[cfg(feature = "http-body")]
-use http_body::Body as HttpBody;
 use percent_encoding::percent_decode_str;
 use thiserror::Error;
 
 pub use mendes_macros::{handler, route, scope};
-
-#[cfg(feature = "hyper")]
-use crate::hyper::ApplicationService;
 
 /// Main interface for an application or service
 ///
@@ -34,7 +28,7 @@ use crate::hyper::ApplicationService;
 #[async_trait]
 pub trait Application: Send + Sized {
     type RequestBody: Send;
-    type ResponseBody: Send;
+    type ResponseBody: http_body::Body;
     type Error: IntoResponse<Self> + WithStatus + From<Error> + Send;
 
     async fn handle(cx: Context<Self>) -> Response<Self::ResponseBody>;
@@ -53,17 +47,17 @@ pub trait Application: Send + Sized {
         from_bytes::<T>(req, bytes)
     }
 
-    #[cfg(feature = "http-body")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "http-body")))]
+    #[cfg(feature = "http-body-util")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "http-body-util")))]
     async fn from_body<T: serde::de::DeserializeOwned>(
         req: &Parts,
         body: Self::RequestBody,
         max_len: usize,
     ) -> Result<T, Error>
     where
-        Self::RequestBody: HttpBody + Send,
-        <Self::RequestBody as HttpBody>::Data: Send,
-        <Self::RequestBody as HttpBody>::Error: Into<Box<dyn StdError + Sync + Send>>,
+        Self::RequestBody: Body + Send,
+        <Self::RequestBody as Body>::Data: Send,
+        <Self::RequestBody as Body>::Error: Into<Box<dyn StdError + Sync + Send>>,
     {
         // Check if the Content-Length header suggests the body is larger than our max len
         // to avoid allocation if we drop the request in any case.
@@ -78,12 +72,11 @@ pub trait Application: Send + Sized {
         from_body::<Self::RequestBody, T>(req, body, max_len).await
     }
 
-    #[cfg(feature = "http-body")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "http-body")))]
-    async fn body_bytes<B>(body: B, max_len: usize) -> Result<Bytes, Error>
+    #[cfg(feature = "body-util")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "body-util")))]
+    async fn body_bytes<B: http_body::Body + Send>(body: B, max_len: usize) -> Result<Bytes, Error>
     where
-        B: HttpBody + Send,
-        <B as HttpBody>::Data: Send,
+        B::Data: Send,
         B::Error: Into<Box<dyn StdError + Sync + Send + 'static>>,
     {
         // Check if the Content-Length header suggests the body is larger than our max len
@@ -92,6 +85,7 @@ pub trait Application: Send + Sized {
             Some(length) => length,
             None => body.size_hint().lower(),
         };
+
         if expected_len > max_len as u64 {
             return Err(Error::BodyTooLarge);
         }
@@ -108,11 +102,6 @@ pub trait Application: Send + Sized {
             .header(LOCATION, path.as_ref())
             .body(Self::ResponseBody::default())
             .unwrap()
-    }
-
-    #[cfg(feature = "hyper")]
-    fn into_service(self) -> ApplicationService<Self> {
-        ApplicationService(Arc::new(self))
     }
 }
 
@@ -513,56 +502,21 @@ fn from_bytes<'de, T: serde::de::Deserialize<'de>>(
     deserialize_body!(req, bytes)
 }
 
-#[cfg(feature = "http-body")]
-#[cfg_attr(docsrs, doc(cfg(feature = "http-body")))]
+#[cfg(feature = "body-util")]
+#[cfg_attr(docsrs, doc(cfg(feature = "body-util")))]
 #[cfg_attr(feature = "tracing", tracing::instrument(skip(body)))]
-async fn to_bytes<B>(body: B, max_len: usize) -> Result<Bytes, Error>
+async fn to_bytes<B: http_body::Body>(body: B, max_len: usize) -> Result<Bytes, Error>
 where
-    B: HttpBody,
     B::Error: Into<Box<dyn StdError + Send + Sync + 'static>>,
 {
-    pin_utils::pin_mut!(body);
+    #[cfg(feature = "body-util")]
+    use http_body_util::BodyExt;
 
-    // If there's only 1 chunk, we can just return Buf::to_bytes()
-    let mut first = if let Some(buf) = body.data().await {
-        buf.map_err(|err| Error::BodyReceive(err.into()))?
-    } else {
-        return Ok(Bytes::new());
-    };
-
-    let mut received = first.remaining();
-    if received > max_len {
-        return Err(Error::BodyTooLarge);
+    let limited = http_body_util::Limited::new(body, max_len);
+    match limited.collect().await {
+        Ok(collected) => Ok(collected.to_bytes()),
+        Err(err) => Err(Error::BodyReceive(err)),
     }
-
-    let second = if let Some(buf) = body.data().await {
-        buf.map_err(|err| Error::BodyReceive(err.into()))?
-    } else {
-        return Ok(first.copy_to_bytes(first.remaining()));
-    };
-
-    received += second.remaining();
-    if received > max_len {
-        return Err(Error::BodyTooLarge);
-    }
-
-    // With more than 1 buf, we gotta flatten into a Vec first.
-    let cap = first.remaining() + second.remaining() + body.size_hint().lower() as usize;
-    let mut vec = Vec::with_capacity(cap);
-    vec.put(first);
-    vec.put(second);
-
-    while let Some(buf) = body.data().await {
-        let buf = buf.map_err(|err| Error::BodyReceive(err.into()))?;
-        received += buf.remaining();
-        if received > max_len {
-            return Err(Error::BodyTooLarge);
-        }
-
-        vec.put(buf);
-    }
-
-    Ok(vec.into())
 }
 
 // This should only be used by procedural routing macros.
@@ -645,10 +599,10 @@ pub enum Error {
     QueryMissing,
     #[error("unable to decode request URI query: {0}")]
     QueryDecode(serde_urlencoded::de::Error),
-    #[cfg(feature = "http-body")]
+    #[cfg(feature = "body-util")]
     #[error("unable to receive request body: {0}")]
     BodyReceive(Box<dyn StdError + Send + Sync + 'static>),
-    #[cfg(feature = "http-body")]
+    #[cfg(feature = "body-util")]
     #[error("request body too large")]
     BodyTooLarge,
     #[cfg(feature = "json")]
@@ -676,9 +630,9 @@ impl From<&Error> for StatusCode {
             QueryMissing | QueryDecode(_) | BodyNoType => StatusCode::BAD_REQUEST,
             BodyUnknownType(_) => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             PathNotFound | PathComponentMissing | PathParse | PathDecode => StatusCode::NOT_FOUND,
-            #[cfg(feature = "http-body")]
+            #[cfg(feature = "body-util")]
             BodyReceive(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            #[cfg(feature = "http-body")]
+            #[cfg(feature = "body-util")]
             BodyTooLarge => StatusCode::BAD_REQUEST,
             BodyDecodeForm(_) => StatusCode::UNPROCESSABLE_ENTITY,
             #[cfg(feature = "json")]

@@ -12,6 +12,12 @@ pub mod application;
 #[cfg(feature = "application")]
 pub use application::{handler, route, scope, Application, Context, Error, FromContext};
 
+#[cfg(feature = "application")]
+#[cfg_attr(docsrs, doc(cfg(feature = "application")))]
+pub mod body;
+#[cfg(feature = "application")]
+pub use body::Body;
+
 #[cfg(feature = "cookies")]
 #[cfg_attr(docsrs, doc(cfg(feature = "cookies")))]
 /// Cookie support

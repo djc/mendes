@@ -1,14 +1,16 @@
 #![cfg(all(feature = "application", feature = "hyper"))]
 
 use async_trait::async_trait;
-use hyper::Body;
+use bytes::Bytes;
+use http_body_util::Full;
 use mendes::application::IntoResponse;
 use mendes::http::request::Parts;
 use mendes::http::{Response, StatusCode};
+use mendes::hyper::body::Incoming;
 use mendes::{handler, route, Application, Context};
 
 #[handler(GET)]
-async fn hello(_: &App) -> Result<Response<Body>, Error> {
+async fn hello(_: &App) -> Result<Response<Full<Bytes>>, Error> {
     Ok(Response::builder()
         .status(StatusCode::OK)
         .body("Hello, world".into())
@@ -19,11 +21,11 @@ struct App {}
 
 #[async_trait]
 impl Application for App {
-    type RequestBody = ();
-    type ResponseBody = Body;
+    type RequestBody = Incoming;
+    type ResponseBody = Full<Bytes>;
     type Error = Error;
 
-    async fn handle(mut cx: Context<Self>) -> Response<Body> {
+    async fn handle(mut cx: Context<Self>) -> Response<Full<Bytes>> {
         route!(match cx.path() {
             _ => hello,
         })
@@ -49,11 +51,11 @@ impl From<&Error> for StatusCode {
 }
 
 impl IntoResponse<App> for Error {
-    fn into_response(self, _: &App, _: &Parts) -> Response<Body> {
+    fn into_response(self, _: &App, _: &Parts) -> Response<Full<Bytes>> {
         let Error::Mendes(err) = self;
         Response::builder()
             .status(StatusCode::from(&err))
-            .body(err.to_string().into())
+            .body(Full::new(Bytes::from(err.to_string())))
             .unwrap()
     }
 }

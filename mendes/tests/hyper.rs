@@ -1,30 +1,30 @@
 #![cfg(feature = "hyper")]
 
 use std::fmt::{self, Display};
+use std::io;
 use std::net::SocketAddr;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use bytes::Bytes;
 use mendes::application::IntoResponse;
 use mendes::http::request::Parts;
 use mendes::http::{Response, StatusCode};
-use mendes::hyper::{Body, ClientAddr};
-use mendes::{handler, route, Application, Context};
+use mendes::hyper::body::Incoming;
+use mendes::hyper::{ClientAddr, Server};
+use mendes::{handler, route, Application, Body, Context};
+use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
 struct ServerRunner {
-    handle: JoinHandle<()>,
+    handle: JoinHandle<Result<(), io::Error>>,
 }
 
 impl ServerRunner {
     async fn run(addr: SocketAddr) -> Self {
-        let handle = tokio::spawn(async move {
-            hyper::Server::bind(&addr)
-                .serve(App::default().into_service())
-                .await
-                .unwrap();
-        });
+        let listener = TcpListener::bind(addr).await.unwrap();
+        let handle = tokio::spawn(Server::new(listener, App::default()).serve());
         sleep(Duration::from_millis(10)).await;
         Self { handle }
     }
@@ -61,7 +61,7 @@ struct App {}
 
 #[async_trait]
 impl Application for App {
-    type RequestBody = Body;
+    type RequestBody = Incoming;
     type ResponseBody = Body;
     type Error = Error;
 
@@ -76,7 +76,10 @@ impl Application for App {
 async fn client_addr(_: &App, client_addr: ClientAddr) -> Result<Response<Body>, Error> {
     Ok(Response::builder()
         .status(StatusCode::OK)
-        .body(Body::from(format!("client_addr: {}", client_addr.ip())))
+        .body(Body::from(Bytes::from(format!(
+            "client_addr: {}",
+            client_addr.ip()
+        ))))
         .unwrap())
 }
 
@@ -113,7 +116,7 @@ impl IntoResponse<App> for Error {
         let Error::Mendes(err) = self;
         Response::builder()
             .status(StatusCode::from(&err))
-            .body(Body::from(err.to_string()))
+            .body(Body::from(Bytes::from(err.to_string())))
             .unwrap()
     }
 }
