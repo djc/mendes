@@ -4,10 +4,10 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use mendes::application::IntoResponse;
+use mendes::application::{IntoResponse, PathState};
 use mendes::http::request::Parts;
 use mendes::http::{Method, Request, Response, StatusCode};
-use mendes::{handler, route, scope, Application, Context};
+use mendes::{handler, route, scope, Application, Context, FromContext};
 
 #[cfg(feature = "serde-derive")]
 #[tokio::test]
@@ -91,6 +91,17 @@ async fn test_magic_404() {
 }
 
 #[tokio::test]
+async fn test_custom_error_handler() {
+    let rsp = handle(path_request("/custom_hello/true")).await;
+    assert_eq!(rsp.status(), StatusCode::IM_USED);
+
+    // This is missing the ContextExtraction path part. In Error the resulting error is serialized as StatusCode::OK.
+    // But we want to test the custom error handler which serializes this into StatusCode::IM_A_TEAPOT.
+    let rsp = handle(path_request("/custom_hello")).await;
+    assert_eq!(rsp.status(), StatusCode::IM_A_TEAPOT);
+}
+
+#[tokio::test]
 async fn basic() {
     let rsp = handle(path_request("/hello")).await;
     assert_eq!(rsp.status(), StatusCode::OK);
@@ -129,6 +140,8 @@ impl Application for App {
                 GET => hello,
                 POST => named,
             },
+            Some("custom_hello") => custom_error,
+
             #[cfg(feature = "serde-derive")]
             Some("query") => with_query,
         })
@@ -201,9 +214,15 @@ async fn hello(_: &App) -> Result<Response<String>, Error> {
         .unwrap())
 }
 
+#[handler(GET)]
+async fn custom_error(_: &App, _x: ContextExtraction) -> Result<Response<String>, HandlerError> {
+    Err(HandlerError::Test)
+}
+
 #[derive(Debug)]
 enum Error {
     Mendes(mendes::Error),
+    NotTrue,
 }
 
 impl From<mendes::Error> for Error {
@@ -214,17 +233,71 @@ impl From<mendes::Error> for Error {
 
 impl From<&Error> for StatusCode {
     fn from(e: &Error) -> StatusCode {
-        let Error::Mendes(e) = e;
-        StatusCode::from(e)
+        match e {
+            Error::Mendes(e) => StatusCode::from(e),
+            Error::NotTrue => StatusCode::OK,
+        }
     }
 }
 
 impl IntoResponse<App> for Error {
     fn into_response(self, _: &App, _: &Parts) -> Response<String> {
-        let Error::Mendes(err) = self;
-        Response::builder()
-            .status(StatusCode::from(&err))
-            .body(err.to_string())
-            .unwrap()
+        let builder = Response::builder().status(StatusCode::from(&self));
+        match self {
+            Error::Mendes(err) => builder.body(err.to_string()),
+            Error::NotTrue => builder.body("".to_string()),
+        }
+        .unwrap()
+    }
+}
+
+enum HandlerError {
+    Mendes(mendes::Error),
+    NotTrue,
+    Test,
+}
+
+impl From<mendes::Error> for HandlerError {
+    fn from(e: mendes::Error) -> Self {
+        Self::Mendes(e)
+    }
+}
+
+impl From<Error> for HandlerError {
+    fn from(e: Error) -> Self {
+        match e {
+            Error::Mendes(e) => HandlerError::Mendes(e),
+            Error::NotTrue => HandlerError::NotTrue,
+        }
+    }
+}
+
+impl IntoResponse<App> for HandlerError {
+    fn into_response(self, _: &App, _: &Parts) -> Response<String> {
+        let builder = Response::builder();
+        match self {
+            HandlerError::Mendes(err) => {
+                builder.status(StatusCode::from(&err)).body(err.to_string())
+            }
+            HandlerError::Test => builder.status(StatusCode::IM_USED).body("".to_string()),
+            HandlerError::NotTrue => builder.status(StatusCode::IM_A_TEAPOT).body("".to_string()),
+        }
+        .unwrap()
+    }
+}
+
+struct ContextExtraction(bool);
+
+impl FromContext<'_, App> for ContextExtraction {
+    fn from_context(
+        _app: &'_ Arc<App>,
+        req: &'_ Parts,
+        state: &mut PathState,
+        _: &mut Option<<App as Application>::RequestBody>,
+    ) -> Result<ContextExtraction, Error> {
+        match state.next(req.uri.path()) {
+            Some("true") => Ok(ContextExtraction(true)),
+            _ => Err(Error::NotTrue),
+        }
     }
 }
