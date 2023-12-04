@@ -130,10 +130,7 @@ impl<A: Application> IntoResponse<A> for Response<A::ResponseBody> {
     }
 }
 
-impl<A: Application, T> IntoResponse<A> for Result<T, A::Error>
-where
-    T: IntoResponse<A>,
-{
+impl<A: Application, T: IntoResponse<A>, E: IntoResponse<A>> IntoResponse<A> for Result<T, E> {
     fn into_response(self, app: &A, req: &Parts) -> Response<A::ResponseBody> {
         match self {
             Ok(rsp) => rsp.into_response(app, req),
