@@ -26,7 +26,7 @@ pub fn cookie(meta: &CookieMeta, ast: &syn::ItemStruct) -> proc_macro2::TokenStr
     };
 
     quote!(
-        impl mendes::cookies::CookieData for #ident {
+        impl mendes::cookies::CookieData<'static> for #ident {
             const NAME: &'static str = #name;
 
             fn domain() -> Option<&'static str> {

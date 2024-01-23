@@ -32,14 +32,17 @@ mod application {
         ///
         /// Finds the first `Cookie` header whose name matches the given type `T` and
         /// whose value can be successfully decoded, decrypted and has not expired.
-        fn cookie<T: CookieData + DeserializeOwned>(&self, headers: &HeaderMap) -> Option<T>;
+        fn cookie<'a, T: CookieData<'a> + DeserializeOwned>(
+            &self,
+            headers: &HeaderMap,
+        ) -> Option<T>;
 
         /// Set cookie value by appending a `Set-Cookie` to the given `HeaderMap`
         ///
         /// If `data` is `Some`, a new value will be set. If the value is `None`, an
         /// empty value is set with an expiry time in the past, causing the cookie
         /// to be deleted in compliant clients.
-        fn set_cookie<T: CookieData + Serialize>(
+        fn set_cookie<'a, T: CookieData<'a> + Serialize>(
             &self,
             headers: &mut HeaderMap,
             data: Option<T>,
@@ -53,7 +56,7 @@ mod application {
         /// If `data` is `Some`, a new value will be set. If the value is `None`, an
         /// empty value is set with an expiry time in the past, causing the cookie
         /// to be deleted in compliant clients.
-        fn set_cookie_header<T: CookieData + Serialize>(
+        fn set_cookie_header<'a, T: CookieData<'a> + Serialize>(
             &self,
             data: Option<T>,
         ) -> Result<HeaderValue, Error>;
@@ -63,11 +66,14 @@ mod application {
     where
         A: AppWithAeadKey,
     {
-        fn cookie<T: CookieData + DeserializeOwned>(&self, headers: &HeaderMap) -> Option<T> {
+        fn cookie<'a, T: CookieData<'a> + DeserializeOwned>(
+            &self,
+            headers: &HeaderMap,
+        ) -> Option<T> {
             extract(self.key(), headers)
         }
 
-        fn set_cookie_header<T: CookieData + Serialize>(
+        fn set_cookie_header<'a, T: CookieData<'a> + Serialize>(
             &self,
             data: Option<T>,
         ) -> Result<HeaderValue, Error> {
@@ -82,12 +88,12 @@ mod application {
 /// Data to be stored in a cookie
 ///
 /// This is usually derived through the `cookie` procedural attribute macro.
-pub trait CookieData {
+pub trait CookieData<'a> {
     /// The name to use for the cookie
     const NAME: &'static str;
 
     /// Defines the host to which the cookie will be sent
-    fn domain() -> Option<&'static str> {
+    fn domain() -> Option<&'a str> {
         None
     }
 
@@ -109,7 +115,7 @@ pub trait CookieData {
     ///
     /// The browser default here is to use the current directory (removing the last path
     /// segment from the current URL), which seems pretty useless. Instead, we default to `/` here.
-    fn path() -> &'static str {
+    fn path() -> &'a str {
         "/"
     }
 
@@ -144,15 +150,12 @@ pub trait CookieData {
 
 #[derive(Deserialize, Serialize)]
 #[serde(bound(deserialize = "T: DeserializeOwned"))]
-struct Cookie<T>
-where
-    T: CookieData,
-{
+struct Cookie<T> {
     expires: SystemTime,
     data: T,
 }
 
-impl<T: CookieData + Serialize> Cookie<T> {
+impl<'a, T: CookieData<'a> + Serialize> Cookie<T> {
     fn encode(data: T, key: &Key) -> Result<String, Error> {
         let expires = SystemTime::now()
             .checked_add(Duration::new(T::max_age() as u64, 0))
@@ -164,7 +167,7 @@ impl<T: CookieData + Serialize> Cookie<T> {
     }
 }
 
-fn extract<T: CookieData + DeserializeOwned>(key: &Key, headers: &HeaderMap) -> Option<T> {
+fn extract<'a, T: CookieData<'a> + DeserializeOwned>(key: &Key, headers: &HeaderMap) -> Option<T> {
     let name = T::NAME;
     // HTTP/2 allows for multiple cookie headers.
     // https://datatracker.ietf.org/doc/html/rfc9113#name-compressing-the-cookie-head
@@ -194,7 +197,7 @@ fn extract<T: CookieData + DeserializeOwned>(key: &Key, headers: &HeaderMap) -> 
     None
 }
 
-fn cookie<T: CookieData>(value: Option<&str>) -> Result<HeaderValue, Error> {
+fn cookie<'a, T: CookieData<'a>>(value: Option<&str>) -> Result<HeaderValue, Error> {
     let mut s = match value {
         Some(value) => format!(
             "{}={}; Max-Age={}; Path={}",
@@ -302,7 +305,7 @@ mod test {
         id: i64,
     }
 
-    impl super::CookieData for Session {
+    impl<'a> super::CookieData<'a> for Session {
         const NAME: &'static str = "Session";
     }
 }
