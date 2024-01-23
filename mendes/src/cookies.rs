@@ -32,14 +32,14 @@ mod application {
         ///
         /// Finds the first `Cookie` header whose name matches the given type `T` and
         /// whose value can be successfully decoded, decrypted and has not expired.
-        fn cookie<T: CookieData>(&self, headers: &HeaderMap) -> Option<T>;
+        fn cookie<T: CookieData + DeserializeOwned>(&self, headers: &HeaderMap) -> Option<T>;
 
         /// Set cookie value by appending a `Set-Cookie` to the given `HeaderMap`
         ///
         /// If `data` is `Some`, a new value will be set. If the value is `None`, an
         /// empty value is set with an expiry time in the past, causing the cookie
         /// to be deleted in compliant clients.
-        fn set_cookie<T: CookieData>(
+        fn set_cookie<T: CookieData + Serialize>(
             &self,
             headers: &mut HeaderMap,
             data: Option<T>,
@@ -53,18 +53,24 @@ mod application {
         /// If `data` is `Some`, a new value will be set. If the value is `None`, an
         /// empty value is set with an expiry time in the past, causing the cookie
         /// to be deleted in compliant clients.
-        fn set_cookie_header<T: CookieData>(&self, data: Option<T>) -> Result<HeaderValue, Error>;
+        fn set_cookie_header<T: CookieData + Serialize>(
+            &self,
+            data: Option<T>,
+        ) -> Result<HeaderValue, Error>;
     }
 
     impl<A> AppWithCookies for A
     where
         A: AppWithAeadKey,
     {
-        fn cookie<T: CookieData>(&self, headers: &HeaderMap) -> Option<T> {
+        fn cookie<T: CookieData + DeserializeOwned>(&self, headers: &HeaderMap) -> Option<T> {
             extract(self.key(), headers)
         }
 
-        fn set_cookie_header<T: CookieData>(&self, data: Option<T>) -> Result<HeaderValue, Error> {
+        fn set_cookie_header<T: CookieData + Serialize>(
+            &self,
+            data: Option<T>,
+        ) -> Result<HeaderValue, Error> {
             match data {
                 Some(data) => cookie::<T>(Some(&Cookie::encode(data, self.key())?)),
                 None => cookie::<T>(None),
@@ -76,7 +82,7 @@ mod application {
 /// Data to be stored in a cookie
 ///
 /// This is usually derived through the `cookie` procedural attribute macro.
-pub trait CookieData: DeserializeOwned + Serialize {
+pub trait CookieData {
     /// The name to use for the cookie
     const NAME: &'static str;
 
@@ -121,7 +127,10 @@ pub trait CookieData: DeserializeOwned + Serialize {
         true
     }
 
-    fn decode(value: &str, key: &Key) -> Option<Self> {
+    fn decode(value: &str, key: &Key) -> Option<Self>
+    where
+        Self: DeserializeOwned,
+    {
         let mut bytes = BASE64URL_NOPAD.decode(value.as_bytes()).ok()?;
         let plain = key.decrypt(Self::NAME.as_bytes(), &mut bytes).ok()?;
 
@@ -143,7 +152,7 @@ where
     data: T,
 }
 
-impl<T: CookieData> Cookie<T> {
+impl<T: CookieData + Serialize> Cookie<T> {
     fn encode(data: T, key: &Key) -> Result<String, Error> {
         let expires = SystemTime::now()
             .checked_add(Duration::new(T::max_age() as u64, 0))
@@ -155,7 +164,7 @@ impl<T: CookieData> Cookie<T> {
     }
 }
 
-fn extract<T: CookieData>(key: &Key, headers: &HeaderMap) -> Option<T> {
+fn extract<T: CookieData + DeserializeOwned>(key: &Key, headers: &HeaderMap) -> Option<T> {
     let name = T::NAME;
     // HTTP/2 allows for multiple cookie headers.
     // https://datatracker.ietf.org/doc/html/rfc9113#name-compressing-the-cookie-head
