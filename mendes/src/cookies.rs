@@ -32,17 +32,16 @@ mod application {
         ///
         /// Finds the first `Cookie` header whose name matches the given type `T` and
         /// whose value can be successfully decoded, decrypted and has not expired.
-        fn cookie<'a, T: CookieData<'a> + DeserializeOwned>(
-            &self,
-            headers: &HeaderMap,
-        ) -> Option<T>;
+        fn cookie<T: CookieData + DeserializeOwned>(&self, headers: &HeaderMap) -> Option<T> {
+            extract(self.key(), headers)
+        }
 
         /// Set cookie value by appending a `Set-Cookie` to the given `HeaderMap`
         ///
         /// If `data` is `Some`, a new value will be set. If the value is `None`, an
         /// empty value is set with an expiry time in the past, causing the cookie
         /// to be deleted in compliant clients.
-        fn set_cookie<'a, T: CookieData<'a> + Serialize>(
+        fn set_cookie<T: CookieData + Serialize>(
             &self,
             headers: &mut HeaderMap,
             data: Option<T>,
@@ -56,83 +55,34 @@ mod application {
         /// If `data` is `Some`, a new value will be set. If the value is `None`, an
         /// empty value is set with an expiry time in the past, causing the cookie
         /// to be deleted in compliant clients.
-        fn set_cookie_header<'a, T: CookieData<'a> + Serialize>(
-            &self,
-            data: Option<T>,
-        ) -> Result<HeaderValue, Error>;
-    }
-
-    impl<A> AppWithCookies for A
-    where
-        A: AppWithAeadKey,
-    {
-        fn cookie<'a, T: CookieData<'a> + DeserializeOwned>(
-            &self,
-            headers: &HeaderMap,
-        ) -> Option<T> {
-            extract(self.key(), headers)
-        }
-
-        fn set_cookie_header<'a, T: CookieData<'a> + Serialize>(
+        fn set_cookie_header<T: CookieData + Serialize>(
             &self,
             data: Option<T>,
         ) -> Result<HeaderValue, Error> {
-            match data {
-                Some(data) => cookie::<T>(Some(&Cookie::encode(data, self.key())?)),
-                None => cookie::<T>(None),
-            }
+            self.set_cookie_from_parts(T::NAME, data, &T::meta())
+        }
+
+        /// Assemble a `Set-Cookie` `HeaderValue` from parts
+        fn set_cookie_from_parts(
+            &self,
+            name: &str,
+            value: Option<impl Serialize>,
+            meta: &CookieMeta<'_>,
+        ) -> Result<HeaderValue, Error> {
+            let value = value
+                .map(|data| Cookie::encode(name, data, meta, self.key()))
+                .transpose()?;
+            cookie(name, value.as_deref(), meta)
         }
     }
+
+    impl<A: AppWithAeadKey> AppWithCookies for A {}
 }
 
 /// Data to be stored in a cookie
 ///
 /// This is usually derived through the `cookie` procedural attribute macro.
-pub trait CookieData<'a> {
-    /// The name to use for the cookie
-    const NAME: &'static str;
-
-    /// Defines the host to which the cookie will be sent
-    fn domain() -> Option<&'a str> {
-        None
-    }
-
-    /// Forbid JavaScript access to the cookie
-    ///
-    /// Defaults to `false`.
-    fn http_only() -> bool {
-        false
-    }
-
-    /// The maximum age for the cookie in seconds
-    ///
-    /// Defaults to 6 hours.
-    fn max_age() -> u32 {
-        6 * 60 * 60
-    }
-
-    /// Set a path prefix to constrain use of the cookie
-    ///
-    /// The browser default here is to use the current directory (removing the last path
-    /// segment from the current URL), which seems pretty useless. Instead, we default to `/` here.
-    fn path() -> &'a str {
-        "/"
-    }
-
-    /// Controls whether the cookie is sent with cross-origin requests
-    ///
-    /// Defaults to `Some(SameSite::None)`.
-    fn same_site() -> Option<SameSite> {
-        Some(SameSite::None)
-    }
-
-    /// Restrict the cookie to being sent only over secure connections
-    ///
-    /// Defaults to `true`.
-    fn secure() -> bool {
-        true
-    }
-
+pub trait CookieData {
     fn decode(value: &str, key: &Key) -> Option<Self>
     where
         Self: DeserializeOwned,
@@ -146,6 +96,52 @@ pub trait CookieData<'a> {
             false => None,
         }
     }
+
+    fn meta() -> CookieMeta<'static> {
+        CookieMeta::default()
+    }
+
+    /// The name to use for the cookie
+    const NAME: &'static str;
+}
+
+pub struct CookieMeta<'a> {
+    /// Defines the host to which the cookie will be sent
+    pub domain: Option<&'a str>,
+    /// Forbid JavaScript access to the cookie
+    ///
+    /// Defaults to `false`.
+    pub http_only: bool,
+    /// The maximum age for the cookie in seconds
+    ///
+    /// Defaults to 6 hours.
+    pub max_age: u32,
+    /// Set a path prefix to constrain use of the cookie
+    ///
+    /// The browser default here is to use the current directory (removing the last path
+    /// segment from the current URL), which seems pretty useless. Instead, we default to `/` here.
+    pub path: &'a str,
+    /// Controls whether the cookie is sent with cross-origin requests
+    ///
+    /// Defaults to `Some(SameSite::None)`.
+    pub same_site: Option<SameSite>,
+    /// Restrict the cookie to being sent only over secure connections
+    ///
+    /// Defaults to `true`.
+    pub secure: bool,
+}
+
+impl Default for CookieMeta<'static> {
+    fn default() -> Self {
+        Self {
+            domain: None,
+            http_only: false,
+            max_age: 6 * 60 * 60,
+            path: "/",
+            same_site: Some(SameSite::None),
+            secure: true,
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize)]
@@ -155,19 +151,19 @@ struct Cookie<T> {
     data: T,
 }
 
-impl<'a, T: CookieData<'a> + Serialize> Cookie<T> {
-    fn encode(data: T, key: &Key) -> Result<String, Error> {
+impl<T: Serialize> Cookie<T> {
+    fn encode(name: &str, data: T, meta: &CookieMeta<'_>, key: &Key) -> Result<String, Error> {
         let expires = SystemTime::now()
-            .checked_add(Duration::new(T::max_age() as u64, 0))
+            .checked_add(Duration::new(meta.max_age as u64, 0))
             .ok_or(Error::ExpiryWindowTooLong)?;
 
         let mut bytes = postcard::to_stdvec(&Cookie { expires, data })?;
-        key.encrypt(T::NAME.as_bytes(), &mut bytes)?;
+        key.encrypt(name.as_bytes(), &mut bytes)?;
         Ok(BASE64URL_NOPAD.encode(&bytes))
     }
 }
 
-fn extract<'a, T: CookieData<'a> + DeserializeOwned>(key: &Key, headers: &HeaderMap) -> Option<T> {
+fn extract<T: CookieData + DeserializeOwned>(key: &Key, headers: &HeaderMap) -> Option<T> {
     let name = T::NAME;
     // HTTP/2 allows for multiple cookie headers.
     // https://datatracker.ietf.org/doc/html/rfc9113#name-compressing-the-cookie-head
@@ -197,35 +193,31 @@ fn extract<'a, T: CookieData<'a> + DeserializeOwned>(key: &Key, headers: &Header
     None
 }
 
-fn cookie<'a, T: CookieData<'a>>(value: Option<&str>) -> Result<HeaderValue, Error> {
+fn cookie(name: &str, value: Option<&str>, meta: &CookieMeta<'_>) -> Result<HeaderValue, Error> {
     let mut s = match value {
         Some(value) => format!(
             "{}={}; Max-Age={}; Path={}",
-            T::NAME,
-            value,
-            T::max_age(),
-            T::path(),
+            name, value, meta.max_age, meta.path,
         ),
         None => format!(
             "{}=None; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path={}",
-            T::NAME,
-            T::path(),
+            name, meta.path,
         ),
     };
 
-    if let Some(domain) = T::domain() {
+    if let Some(domain) = meta.domain {
         write!(s, "; Domain={domain}").unwrap();
     }
 
-    if T::http_only() {
+    if meta.http_only {
         write!(s, "; HttpOnly").unwrap();
     }
 
-    if let Some(same_site) = T::same_site() {
+    if let Some(same_site) = meta.same_site {
         write!(s, "; SameSite={same_site:?}").unwrap();
     }
 
-    if T::secure() {
+    if meta.secure {
         write!(s, "; Secure").unwrap();
     }
 
@@ -268,7 +260,8 @@ mod test {
         let session = Session { id: 2 };
 
         let mut headers = HeaderMap::new();
-        let cookie_value = Cookie::encode(session, &key).unwrap();
+        let meta = Session::meta();
+        let cookie_value = Cookie::encode(Session::NAME, session, &meta, &key).unwrap();
         let header_value = format!("_internal_s=logs=1&id=toast;Session={cookie_value};RefreshToken=tWEnTuXNfmCV_ZNYZQXvMeZ8AN5KUqas7vsqY1wwcWa6TfxYEqekcBVIpagFXn06XsHSN8GZQqGi2w1jd2Atj-aEwNq2wknQjpmxFKIMAnOYFd6gcCoG6Q").parse().unwrap();
         headers.insert(header::COOKIE, header_value);
 
@@ -290,7 +283,8 @@ mod test {
             "_internal_s=logs=1&id=toast;".parse().unwrap(),
         );
 
-        let cookie_value = Cookie::encode(session, &key).unwrap();
+        let meta = Session::meta();
+        let cookie_value = Cookie::encode(Session::NAME, session, &meta, &key).unwrap();
         headers.append(
             header::COOKIE,
             format!("Session={cookie_value}").parse().unwrap(),
@@ -305,7 +299,7 @@ mod test {
         id: i64,
     }
 
-    impl<'a> super::CookieData<'a> for Session {
+    impl super::CookieData for Session {
         const NAME: &'static str = "Session";
     }
 }
