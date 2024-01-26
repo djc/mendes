@@ -26,32 +26,19 @@ pub fn cookie(meta: &CookieMeta, ast: &syn::ItemStruct) -> proc_macro2::TokenStr
     };
 
     quote!(
-        impl mendes::cookies::CookieData<'static> for #ident {
+        impl mendes::cookies::CookieData for #ident {
+            fn meta() -> mendes::cookies::CookieMeta<'static> {
+                mendes::cookies::CookieMeta {
+                    domain: #domain,
+                    http_only: #http_only,
+                    max_age: #max_age,
+                    path: #path,
+                    same_site: #same_site,
+                    secure: #secure,
+                }
+            }
+
             const NAME: &'static str = #name;
-
-            fn domain() -> Option<&'static str> {
-                #domain
-            }
-
-            fn http_only() -> bool {
-                #http_only
-            }
-
-            fn max_age() -> u32 {
-                #max_age
-            }
-
-            fn path() -> &'static str {
-                #path
-            }
-
-            fn same_site() -> Option<mendes::cookies::SameSite> {
-                #same_site
-            }
-
-            fn secure() -> bool {
-                #secure
-            }
         }
     )
 }
