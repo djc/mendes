@@ -286,7 +286,7 @@ impl IntoResponse<App> for HandlerError {
     }
 }
 
-struct ContextExtraction(bool);
+struct ContextExtraction;
 
 impl FromContext<'_, App> for ContextExtraction {
     fn from_context(
@@ -296,7 +296,7 @@ impl FromContext<'_, App> for ContextExtraction {
         _: &mut Option<<App as Application>::RequestBody>,
     ) -> Result<ContextExtraction, Error> {
         match state.next(req.uri.path()) {
-            Some("true") => Ok(ContextExtraction(true)),
+            Some("true") => Ok(ContextExtraction),
             _ => Err(Error::NotTrue),
         }
     }
