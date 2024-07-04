@@ -12,9 +12,9 @@ use mendes::{handler, route, scope, Application, Context, FromContext};
 #[cfg(feature = "serde-derive")]
 #[tokio::test]
 async fn test_query() {
-    let rsp = handle(path_request("/query?foo=3&bar=baz")).await;
+    let rsp = handle(path_request("/query?foo=3&bar=baz%20beer")).await;
     assert_eq!(rsp.status(), StatusCode::OK);
-    assert_eq!(rsp.into_body(), "query: Query { foo: 3, bar: \"baz\" }");
+    assert_eq!(rsp.into_body(), "query: Query { foo: 3, bar: \"baz beer\" }");
 }
 
 #[tokio::test]
