@@ -74,6 +74,7 @@ type UnwindSafeHandlerFuture<T, E> = Map<
 fn panic_response<B: From<&'static str>>(
     result: Result<Response<B>, Box<dyn std::any::Any + std::marker::Send + 'static>>,
 ) -> Result<Response<B>, Infallible> {
+    #[allow(unused_variables)] // Depends on features
     let error = match result {
         Ok(rsp) => return Ok(rsp),
         Err(e) => e,
@@ -135,6 +136,7 @@ where
 #[cfg_attr(docsrs, doc(cfg(feature = "compression")))]
 mod encoding {
     use std::str::FromStr;
+    #[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
     use std::{io, mem};
 
     #[cfg(feature = "brotli")]
@@ -143,14 +145,20 @@ mod encoding {
     use async_compression::tokio::bufread::DeflateEncoder;
     #[cfg(feature = "gzip")]
     use async_compression::tokio::bufread::GzipEncoder;
+    #[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
     use futures_util::stream::TryStreamExt;
-    use http::header::{HeaderValue, ACCEPT_ENCODING, CONTENT_ENCODING};
+    use http::header::ACCEPT_ENCODING;
+    #[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
+    use http::header::{HeaderValue, CONTENT_ENCODING};
+    use http::request::Parts;
     use http::Response;
+    use hyper::body::Body;
+    #[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
     use tokio_util::codec::{BytesCodec, FramedRead};
+    #[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
     use tokio_util::io::StreamReader;
 
-    use super::*;
-
+    #[allow(unused_mut)] // Depends on features
     pub fn encode_content(req: &Parts, mut rsp: Response<Body>) -> Response<Body> {
         let accept = match req.headers.get(ACCEPT_ENCODING).map(|hv| hv.to_str()) {
             Some(Ok(accept)) => accept,

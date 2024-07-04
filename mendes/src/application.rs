@@ -1,18 +1,18 @@
 use std::borrow::Cow;
-#[cfg(feature = "with-http-body")]
+#[cfg(feature = "http-body")]
 use std::error::Error as StdError;
 use std::str;
 use std::str::FromStr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-#[cfg(feature = "with-http-body")]
+#[cfg(feature = "http-body")]
 use bytes::{Buf, BufMut, Bytes};
 use http::header::LOCATION;
 use http::request::Parts;
 use http::Request;
 use http::{Response, StatusCode};
-#[cfg(feature = "with-http-body")]
+#[cfg(feature = "http-body")]
 use http_body::Body as HttpBody;
 use percent_encoding::percent_decode_str;
 use thiserror::Error;
@@ -53,8 +53,8 @@ pub trait Application: Send + Sized {
         from_bytes::<T>(req, bytes)
     }
 
-    #[cfg(feature = "with-http-body")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "with-http-body")))]
+    #[cfg(feature = "http-body")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "http-body")))]
     async fn from_body<T: serde::de::DeserializeOwned>(
         req: &Parts,
         body: Self::RequestBody,
@@ -78,8 +78,8 @@ pub trait Application: Send + Sized {
         from_body::<Self::RequestBody, T>(req, body, max_len).await
     }
 
-    #[cfg(feature = "with-http-body")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "with-http-body")))]
+    #[cfg(feature = "http-body")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "http-body")))]
     async fn body_bytes<B>(body: B, max_len: usize) -> Result<Bytes, Error>
     where
         B: HttpBody + Send,
@@ -491,8 +491,8 @@ where
     }
 }
 
-#[cfg(feature = "with-http-body")]
-#[cfg_attr(docsrs, doc(cfg(feature = "with-http-body")))]
+#[cfg(feature = "http-body")]
+#[cfg_attr(docsrs, doc(cfg(feature = "http-body")))]
 async fn from_body<B, T: serde::de::DeserializeOwned>(
     req: &Parts,
     body: B,
@@ -513,9 +513,9 @@ fn from_bytes<'de, T: serde::de::Deserialize<'de>>(
     deserialize_body!(req, bytes)
 }
 
-#[cfg(feature = "with-http-body")]
-#[cfg_attr(docsrs, doc(cfg(feature = "with-http-body")))]
-#[tracing::instrument(skip(body))]
+#[cfg(feature = "http-body")]
+#[cfg_attr(docsrs, doc(cfg(feature = "http-body")))]
+#[cfg_attr(feature = "tracing", tracing::instrument(skip(body)))]
 async fn to_bytes<B>(body: B, max_len: usize) -> Result<Bytes, Error>
 where
     B: HttpBody,
@@ -645,10 +645,10 @@ pub enum Error {
     QueryMissing,
     #[error("unable to decode request URI query: {0}")]
     QueryDecode(serde_urlencoded::de::Error),
-    #[cfg(feature = "with-http-body")]
+    #[cfg(feature = "http-body")]
     #[error("unable to receive request body: {0}")]
     BodyReceive(Box<dyn StdError + Send + Sync + 'static>),
-    #[cfg(feature = "with-http-body")]
+    #[cfg(feature = "http-body")]
     #[error("request body too large")]
     BodyTooLarge,
     #[cfg(feature = "json")]
@@ -676,9 +676,9 @@ impl From<&Error> for StatusCode {
             QueryMissing | QueryDecode(_) | BodyNoType => StatusCode::BAD_REQUEST,
             BodyUnknownType(_) => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             PathNotFound | PathComponentMissing | PathParse | PathDecode => StatusCode::NOT_FOUND,
-            #[cfg(feature = "with-http-body")]
+            #[cfg(feature = "http-body")]
             BodyReceive(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            #[cfg(feature = "with-http-body")]
+            #[cfg(feature = "http-body")]
             BodyTooLarge => StatusCode::BAD_REQUEST,
             BodyDecodeForm(_) => StatusCode::UNPROCESSABLE_ENTITY,
             #[cfg(feature = "json")]
