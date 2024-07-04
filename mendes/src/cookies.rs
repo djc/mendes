@@ -1,14 +1,22 @@
+#[cfg(feature = "application")]
 use std::convert::TryFrom;
+#[cfg(feature = "application")]
 use std::fmt::Write;
 use std::str;
-use std::time::{Duration, SystemTime};
+#[cfg(feature = "application")]
+use std::time::Duration;
+use std::time::SystemTime;
 
 use data_encoding::BASE64URL_NOPAD;
-use http::header::{InvalidHeaderValue, COOKIE};
+use http::header::InvalidHeaderValue;
+#[cfg(feature = "application")]
+use http::header::COOKIE;
+#[cfg(feature = "application")]
 use http::{HeaderMap, HeaderValue};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
 
+#[cfg(feature = "application")]
 use crate::key::{NONCE_LEN, TAG_LEN};
 
 pub use crate::key::Key;
@@ -151,6 +159,7 @@ struct Cookie<T> {
     data: T,
 }
 
+#[cfg(feature = "application")]
 impl<T: Serialize> Cookie<T> {
     fn encode(name: &str, data: T, meta: &CookieMeta<'_>, key: &Key) -> Result<String, Error> {
         let expires = SystemTime::now()
@@ -163,6 +172,7 @@ impl<T: Serialize> Cookie<T> {
     }
 }
 
+#[cfg(feature = "application")]
 fn extract<T: CookieData + DeserializeOwned>(key: &Key, headers: &HeaderMap) -> Option<T> {
     let name = T::NAME;
     // HTTP/2 allows for multiple cookie headers.
@@ -193,6 +203,7 @@ fn extract<T: CookieData + DeserializeOwned>(key: &Key, headers: &HeaderMap) -> 
     None
 }
 
+#[cfg(feature = "application")]
 fn cookie(name: &str, value: Option<&str>, meta: &CookieMeta<'_>) -> Result<HeaderValue, Error> {
     let mut s = match value {
         Some(value) => format!(

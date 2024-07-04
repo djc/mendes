@@ -35,7 +35,6 @@ impl Key {
     /// Create key from slice of hexadecimal characters
     ///
     /// This will fail if the length of the slice is not equal to 32.
-    #[cfg(feature = "application")]
     pub fn from_hex_lower(s: &[u8]) -> Result<Self, Error> {
         let bytes = HEXLOWER
             .decode(s)
@@ -85,4 +84,5 @@ pub enum Error {
 }
 
 pub(crate) const NONCE_LEN: usize = 12;
+#[cfg(all(feature = "cookies", feature = "application"))]
 pub(crate) const TAG_LEN: usize = 16;
