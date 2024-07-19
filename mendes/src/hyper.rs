@@ -34,6 +34,10 @@ pub struct Server<A, F> {
 }
 
 impl<A: Application> Server<A, Pending<()>> {
+    pub async fn bind(address: SocketAddr, app: A) -> Result<Server<A, Pending<()>>, io::Error> {
+        Ok(Self::new(TcpListener::bind(address).await?, app))
+    }
+
     pub fn new(listener: TcpListener, app: A) -> Server<A, Pending<()>> {
         Server {
             listener,

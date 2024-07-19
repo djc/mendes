@@ -13,7 +13,6 @@ use mendes::http::{Response, StatusCode};
 use mendes::hyper::body::Incoming;
 use mendes::hyper::{ClientAddr, Server};
 use mendes::{handler, route, Application, Body, Context};
-use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
@@ -23,8 +22,7 @@ struct ServerRunner {
 
 impl ServerRunner {
     async fn run(addr: SocketAddr) -> Self {
-        let listener = TcpListener::bind(addr).await.unwrap();
-        let handle = tokio::spawn(Server::new(listener, App::default()).serve());
+        let handle = tokio::spawn(Server::bind(addr, App::default()).await.unwrap().serve());
         sleep(Duration::from_millis(10)).await;
         Self { handle }
     }
