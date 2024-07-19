@@ -11,6 +11,7 @@ use http::header::LOCATION;
 use http::request::Parts;
 use http::Request;
 use http::{Response, StatusCode};
+use http_body::Body as HttpBody;
 use percent_encoding::percent_decode_str;
 use thiserror::Error;
 
@@ -28,7 +29,7 @@ pub use mendes_macros::{handler, route, scope};
 #[async_trait]
 pub trait Application: Send + Sized {
     type RequestBody: Send;
-    type ResponseBody: http_body::Body;
+    type ResponseBody: HttpBody;
     type Error: IntoResponse<Self> + WithStatus + From<Error> + Send;
 
     async fn handle(cx: Context<Self>) -> Response<Self::ResponseBody>;
@@ -47,17 +48,17 @@ pub trait Application: Send + Sized {
         from_bytes::<T>(req, bytes)
     }
 
-    #[cfg(feature = "http-body-util")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "http-body-util")))]
+    #[cfg(feature = "body-util")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "body-util")))]
     async fn from_body<T: serde::de::DeserializeOwned>(
         req: &Parts,
         body: Self::RequestBody,
         max_len: usize,
     ) -> Result<T, Error>
     where
-        Self::RequestBody: Body + Send,
-        <Self::RequestBody as Body>::Data: Send,
-        <Self::RequestBody as Body>::Error: Into<Box<dyn StdError + Sync + Send>>,
+        Self::RequestBody: HttpBody + Send,
+        <Self::RequestBody as HttpBody>::Data: Send,
+        <Self::RequestBody as HttpBody>::Error: Into<Box<dyn StdError + Sync + Send>>,
     {
         // Check if the Content-Length header suggests the body is larger than our max len
         // to avoid allocation if we drop the request in any case.
@@ -65,6 +66,7 @@ pub trait Application: Send + Sized {
             Some(length) => length,
             None => body.size_hint().lower(),
         };
+
         if expected_len > max_len as u64 {
             return Err(Error::BodyTooLarge);
         }
@@ -74,7 +76,7 @@ pub trait Application: Send + Sized {
 
     #[cfg(feature = "body-util")]
     #[cfg_attr(docsrs, doc(cfg(feature = "body-util")))]
-    async fn body_bytes<B: http_body::Body + Send>(body: B, max_len: usize) -> Result<Bytes, Error>
+    async fn body_bytes<B: HttpBody + Send>(body: B, max_len: usize) -> Result<Bytes, Error>
     where
         B::Data: Send,
         B::Error: Into<Box<dyn StdError + Sync + Send + 'static>>,
@@ -480,8 +482,8 @@ where
     }
 }
 
-#[cfg(feature = "http-body")]
-#[cfg_attr(docsrs, doc(cfg(feature = "http-body")))]
+#[cfg(feature = "body-util")]
+#[cfg_attr(docsrs, doc(cfg(feature = "body-util")))]
 async fn from_body<B, T: serde::de::DeserializeOwned>(
     req: &Parts,
     body: B,
@@ -505,7 +507,7 @@ fn from_bytes<'de, T: serde::de::Deserialize<'de>>(
 #[cfg(feature = "body-util")]
 #[cfg_attr(docsrs, doc(cfg(feature = "body-util")))]
 #[cfg_attr(feature = "tracing", tracing::instrument(skip(body)))]
-async fn to_bytes<B: http_body::Body>(body: B, max_len: usize) -> Result<Bytes, Error>
+async fn to_bytes<B: HttpBody>(body: B, max_len: usize) -> Result<Bytes, Error>
 where
     B::Error: Into<Box<dyn StdError + Send + Sync + 'static>>,
 {
