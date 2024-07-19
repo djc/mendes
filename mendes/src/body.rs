@@ -194,6 +194,12 @@ impl From<Bytes> for Body {
     }
 }
 
+impl Default for Body {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
 #[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
 impl EncodeResponse for Response<Body> {
     fn encoded(mut self, req: &request::Parts) -> Response<Body> {
