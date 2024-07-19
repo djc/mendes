@@ -422,7 +422,7 @@ macro_rules! deserialize_body {
             Some("application/x-www-form-urlencoded") => {
                 serde_urlencoded::from_bytes::<T>(&$bytes).map_err(Error::BodyDecodeForm)
             }
-            #[cfg(feature = "serde_json")]
+            #[cfg(feature = "json")]
             Some("application/json") => {
                 serde_json::from_slice::<T>(&$bytes).map_err(Error::BodyDecodeJson)
             }
