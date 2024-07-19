@@ -332,24 +332,6 @@ impl<'a, A: Application> FromContext<'a, A> for ClientAddr {
     }
 }
 
-#[derive(Debug)]
-pub struct IncomingStream<'a> {
-    tcp_stream: &'a TokioIo<TcpStream>,
-    remote_addr: SocketAddr,
-}
-
-impl IncomingStream<'_> {
-    /// Returns the local address that this stream is bound to.
-    pub fn local_addr(&self) -> std::io::Result<SocketAddr> {
-        self.tcp_stream.inner().local_addr()
-    }
-
-    /// Returns the remote address that this stream is bound to.
-    pub fn remote_addr(&self) -> SocketAddr {
-        self.remote_addr
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct ClientAddr(SocketAddr);
 
