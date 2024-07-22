@@ -95,6 +95,17 @@ impl http_body::Body for Body {
                     false => None,
                 });
             }
+            #[cfg(feature = "hyper")]
+            PinnedBody::Hyper(mut inner) => {
+                return Poll::Ready(match ready!(inner.as_mut().poll_frame(cx)) {
+                    Some(Ok(frame)) => Some(Ok(frame)),
+                    Some(Err(error)) => Some(Err(io::Error::new(io::ErrorKind::Other, error))),
+                    None => {
+                        *this.done = true;
+                        None
+                    }
+                })
+            }
             PinnedBody::Streaming(inner) => match ready!(inner.as_mut().poll_frame(cx)) {
                 Some(item) => return Poll::Ready(Some(item)),
                 None => {
@@ -127,7 +138,11 @@ impl http_body::Body for Body {
                             false => None,
                         });
                     }
-                    InnerBody::Lazy { .. } | InnerBody::Streaming(_) => unreachable!(),
+                    #[cfg(feature = "hyper")]
+                    InnerBody::Hyper(_) => unreachable!(),
+                    InnerBody::Lazy { .. } | InnerBody::Streaming(_) => {
+                        unreachable!()
+                    }
                 }
             }
         };
@@ -154,6 +169,8 @@ impl http_body::Body for Body {
         match (self.done, &self.inner) {
             (true, _) => SizeHint::with_exact(0),
             (false, InnerBody::Bytes(body)) => SizeHint::with_exact(body.len() as u64),
+            #[cfg(feature = "hyper")]
+            (false, InnerBody::Hyper(inner)) => inner.size_hint(),
             (false, InnerBody::Lazy { .. } | InnerBody::Streaming(_)) => SizeHint::default(),
             #[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
             (false, InnerBody::Brotli(_) | InnerBody::Deflate(_) | InnerBody::Gzip(_)) => {
@@ -162,6 +179,17 @@ impl http_body::Body for Body {
                 hint.set_upper(self.full_size + 256);
                 hint
             }
+        }
+    }
+}
+
+#[cfg(feature = "hyper")]
+impl From<hyper::body::Incoming> for Body {
+    fn from(inner: hyper::body::Incoming) -> Self {
+        Self {
+            inner: InnerBody::Hyper(inner),
+            full_size: 0,
+            done: false,
         }
     }
 }
@@ -226,6 +254,7 @@ impl EncodeResponse for Response<Body> {
                     InnerBody::Brotli(_)
                     | InnerBody::Deflate(_)
                     | InnerBody::Gzip(_)
+                    | InnerBody::Hyper(_)
                     | InnerBody::Lazy { .. }
                     | InnerBody::Streaming(_),
                 ..
@@ -261,6 +290,8 @@ enum InnerBody {
     #[cfg(feature = "gzip")]
     Gzip(#[pin] GzipEncoder<BufReader>),
     Bytes(#[pin] Bytes),
+    #[cfg(feature = "hyper")]
+    Hyper(#[pin] hyper::body::Incoming),
     Lazy {
         future: Pin<Box<dyn Future<Output = io::Result<Bytes>> + Send>>,
         encoding: Encoding,
