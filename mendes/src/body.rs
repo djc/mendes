@@ -1,6 +1,7 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::task::ready;
 use std::task::Poll;
 use std::{io, mem, str};
@@ -14,6 +15,7 @@ use async_compression::tokio::bufread::GzipEncoder;
 use bytes::{Buf, Bytes, BytesMut};
 #[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
 use http::header::{ACCEPT_ENCODING, CONTENT_ENCODING};
+use http::request::Parts;
 #[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
 use http::HeaderMap;
 #[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
@@ -24,6 +26,8 @@ use pin_project::pin_project;
 use tokio::io::{AsyncBufRead, AsyncRead, ReadBuf};
 #[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
 use tokio_util::io::poll_read_buf;
+
+use crate::application::{Application, FromContext, PathState};
 
 #[pin_project]
 pub struct Body {
@@ -60,6 +64,20 @@ impl Body {
             inner: InnerBody::Streaming(Box::pin(stream)),
             full_size: 0,
             done: false,
+        }
+    }
+}
+
+impl<'a, A: Application<RequestBody = Body>> FromContext<'a, A> for Body {
+    fn from_context(
+        _: &'a Arc<A>,
+        _: &'a Parts,
+        _: &mut PathState,
+        body: &mut Option<Body>,
+    ) -> Result<Self, A::Error> {
+        match body.take() {
+            Some(body) => Ok(body),
+            None => panic!("attempted to retrieve body twice"),
         }
     }
 }
