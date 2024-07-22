@@ -60,7 +60,8 @@ impl<A: Application> Server<A, Pending<()>> {
 
 impl<A, F> Server<A, F>
 where
-    A: Application<RequestBody = Incoming> + Sync + 'static,
+    A: Application + Sync + 'static,
+    A::RequestBody: From<Incoming>,
     <<A as Application>::ResponseBody as Body>::Data: Send,
     <<A as Application>::ResponseBody as Body>::Error: StdError + Send + Sync,
     <A as Application>::ResponseBody: From<&'static str> + Send,
@@ -184,8 +185,9 @@ struct Connection<A> {
     app: Arc<A>,
 }
 
-impl<A: Application<RequestBody = Incoming> + 'static> Connection<A>
+impl<A: Application + 'static> Connection<A>
 where
+    A::RequestBody: From<Incoming>,
     A::ResponseBody: From<&'static str> + Send,
     <A::ResponseBody as Body>::Data: Send,
     <A::ResponseBody as Body>::Error: StdError + Send + Sync,
@@ -254,18 +256,18 @@ pub struct ConnectionService<A> {
     app: Arc<A>,
 }
 
-impl<A: Application<RequestBody = Incoming> + 'static> Service<Request<Incoming>>
-    for ConnectionService<A>
+impl<A: Application + 'static> Service<Request<Incoming>> for ConnectionService<A>
 where
+    A::RequestBody: From<Incoming>,
     A::ResponseBody: From<&'static str>,
 {
     type Response = Response<A::ResponseBody>;
     type Error = Infallible;
     type Future = UnwindSafeHandlerFuture<Self::Response, Self::Error>;
 
-    fn call(&self, mut req: Request<A::RequestBody>) -> Self::Future {
+    fn call(&self, mut req: Request<Incoming>) -> Self::Future {
         req.extensions_mut().insert(ClientAddr(self.addr));
-        let cx = Context::new(self.app.clone(), req);
+        let cx = Context::new(self.app.clone(), req.map(|body| body.into()));
         AssertUnwindSafe(A::handle(cx))
             .catch_unwind()
             .map(panic_response)
