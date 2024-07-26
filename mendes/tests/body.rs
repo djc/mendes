@@ -1,4 +1,4 @@
-#![cfg(all(feature = "application", feature = "http-body", feature = "hyper"))]
+#![cfg(all(feature = "application", feature = "hyper"))]
 
 use std::sync::Arc;
 
@@ -6,8 +6,7 @@ use async_trait::async_trait;
 use mendes::application::IntoResponse;
 use mendes::http::request::Parts;
 use mendes::http::{Method, Request, Response, StatusCode};
-use mendes::hyper::Body;
-use mendes::{handler, route, Application, Context};
+use mendes::{handler, route, Application, Body, Context};
 
 #[cfg(feature = "json")]
 #[tokio::test]
