@@ -9,7 +9,6 @@ use mendes::http::request::Parts;
 use mendes::http::{Method, Request, Response, StatusCode};
 use mendes::{handler, route, scope, Application, Context, FromContext};
 
-#[cfg(feature = "serde-derive")]
 #[tokio::test]
 async fn test_query() {
     let rsp = handle(path_request("/query?foo=3&bar=baz")).await;
@@ -142,7 +141,6 @@ impl Application for App {
             },
             Some("custom_hello") => custom_error,
 
-            #[cfg(feature = "serde-derive")]
             Some("query") => with_query,
         })
     }
@@ -156,7 +154,6 @@ async fn scoped(cx: &mut Context<App>) -> Response<String> {
     })
 }
 
-#[cfg(feature = "serde-derive")]
 #[handler(GET)]
 async fn with_query(_: &App, #[query] query: Query<'_>) -> Result<Response<String>, Error> {
     Ok(Response::builder()
@@ -165,7 +162,6 @@ async fn with_query(_: &App, #[query] query: Query<'_>) -> Result<Response<Strin
         .unwrap())
 }
 
-#[cfg(feature = "serde-derive")]
 #[derive(Debug, serde::Deserialize)]
 #[allow(dead_code)] // Reflected as part of the `Debug` impl
 struct Query<'a> {

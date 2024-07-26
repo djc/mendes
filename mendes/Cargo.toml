@@ -60,6 +60,7 @@ tokio-util = { version = "0.7", optional = true, features = ["codec", "compat", 
 tracing = { version = "0.1.26", optional = true }
 
 [dev-dependencies]
+serde = { version = "1.0.104", features = ["derive"] }
 reqwest = { version = "0.12", default-features = false }
 tokio = { version = "1", features = ["macros", "rt"] }
 
