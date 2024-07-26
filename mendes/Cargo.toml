@@ -2,7 +2,7 @@
 name = "mendes"
 version = "0.9.3"
 edition = "2021"
-rust-version = "1.67"
+rust-version = "1.70"
 description = "Rust web toolkit for impatient perfectionists"
 documentation = "https://docs.rs/mendes"
 repository = "https://github.com/djc/mendes"
