@@ -46,7 +46,7 @@ impl Body {
         }
     }
 
-    pub fn lazy(future: impl Future<Output = io::Result<Bytes>> + Send + 'static) -> Self {
+    pub fn lazy(future: impl Future<Output = io::Result<Bytes>> + Send + Sync + 'static) -> Self {
         Self {
             inner: InnerBody::Lazy {
                 future: Box::pin(future),
@@ -311,7 +311,7 @@ enum InnerBody {
     #[cfg(feature = "hyper")]
     Hyper(#[pin] hyper::body::Incoming),
     Lazy {
-        future: Pin<Box<dyn Future<Output = io::Result<Bytes>> + Send>>,
+        future: Pin<Box<dyn Future<Output = io::Result<Bytes>> + Send + Sync>>,
         encoding: Encoding,
     },
     Streaming(Pin<Box<dyn http_body::Body<Data = Bytes, Error = io::Error> + Send>>),
