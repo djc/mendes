@@ -1,7 +1,12 @@
 [licenses]
-allow-osi-fsf-free = "either"
-copyleft = "deny"
-exceptions = [{ allow = ["ISC", "MIT", "OpenSSL"], name = "ring" }]
+allow = [
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "OpenSSL",
+    "Unicode-DFS-2016",
+]
 
 [[licenses.clarify]]
 name = "ring"
