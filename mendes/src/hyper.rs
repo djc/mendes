@@ -1,16 +1,14 @@
 use std::convert::Infallible;
 use std::error::Error as StdError;
-use std::future::{poll_fn, Future, Pending};
+use std::future::{pending, Future, Pending};
 use std::io;
 use std::net::SocketAddr;
 use std::panic::AssertUnwindSafe;
-use std::pin::Pin;
+use std::pin::{pin, Pin};
 use std::sync::Arc;
-use std::task::Poll;
 use std::time::Duration;
 
 use futures_util::future::{CatchUnwind, FutureExt, Map};
-use futures_util::pin_mut;
 use http::request::Parts;
 use http::{Request, Response, StatusCode};
 use hyper::body::{Body, Incoming};
@@ -20,7 +18,7 @@ use hyper_util::server::conn::auto::Builder;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::watch;
 use tokio::time::sleep;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info};
 
 use super::Application;
 use crate::application::{Context, FromContext, PathState};
@@ -75,6 +73,14 @@ where
         } = self;
 
         let (listener_state, conn_state) = states(signal);
+        let mut shutting_down = pin!(async move {
+            match listener_state.shutting_down {
+                Some(shutting_down) => shutting_down.closed().await,
+                None => pending().await,
+            }
+        }
+        .fuse());
+
         loop {
             let (stream, addr) = tokio::select! {
                 res = listener.accept() => {
@@ -93,7 +99,7 @@ where
                         }
                     }
                 }
-                _ = listener_state.is_shutting_down() => break,
+                _ = shutting_down.as_mut() => break,
             };
 
             debug!("connection accepted from {addr}");
@@ -109,12 +115,13 @@ where
         }
 
         let ListenerState { task_monitor, .. } = listener_state;
+        drop(conn_state);
         drop(listener);
         if let Some(task_monitor) = task_monitor {
-            trace!(
-                "waiting for {} task(s) to finish",
-                task_monitor.receiver_count()
-            );
+            let tasks = task_monitor.receiver_count();
+            if tasks > 0 {
+                debug!("waiting for {tasks} task(s) to finish");
+            }
             task_monitor.closed().await;
         }
 
@@ -143,7 +150,6 @@ fn states(
         ListenerState {
             shutting_down: Some(shutting_down.clone()),
             task_monitor: Some(task_monitor),
-            _task_done: Some(task_done.clone()),
         },
         ConnectionState {
             shutting_down: Some(shutting_down),
@@ -160,22 +166,6 @@ struct ListenerState {
     ///
     /// Call `closed().await` to wait for all connections to finish.
     task_monitor: Option<watch::Sender<()>>,
-    /// Given to each connection so we can monitor the number of receivers via `_task_monitor`
-    _task_done: Option<watch::Receiver<()>>,
-}
-
-impl ListenerState {
-    async fn is_shutting_down(&self) {
-        poll_fn(|cx| match &self.shutting_down {
-            Some(tx) => {
-                let future = tx.closed();
-                pin_mut!(future);
-                future.poll(cx)
-            }
-            None => Poll::Pending,
-        })
-        .await
-    }
 }
 
 struct Connection<A> {
@@ -204,11 +194,14 @@ where
 
         let builder = Builder::new(TokioExecutor::new());
         let stream = TokioIo::new(stream);
-        let conn = builder.serve_connection_with_upgrades(stream, service);
-        pin_mut!(conn);
-
-        let shutting_down = state.is_shutting_down();
-        pin_mut!(shutting_down);
+        let mut conn = pin!(builder.serve_connection_with_upgrades(stream, service));
+        let mut shutting_down = pin!(async move {
+            match state.shutting_down {
+                Some(shutting_down) => shutting_down.closed().await,
+                None => pending().await,
+            }
+        }
+        .fuse());
 
         loop {
             tokio::select! {
@@ -218,7 +211,7 @@ where
                     }
                     break;
                 }
-                _ = &mut shutting_down => {
+                _ = shutting_down.as_mut() => {
                     debug!("shutting down connection to {addr}");
                     conn.as_mut().graceful_shutdown();
                 }
@@ -235,20 +228,6 @@ struct ConnectionState {
     shutting_down: Option<Arc<watch::Sender<()>>>,
     /// Keeping this around will allow the server to wait for the connection to finish
     _task_done: Option<watch::Receiver<()>>,
-}
-
-impl ConnectionState {
-    async fn is_shutting_down(&self) {
-        poll_fn(|cx| match &self.shutting_down {
-            Some(tx) => {
-                let future = tx.closed().fuse();
-                pin_mut!(future);
-                future.poll(cx)
-            }
-            None => Poll::Pending,
-        })
-        .await
-    }
 }
 
 pub struct ConnectionService<A> {
