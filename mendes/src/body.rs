@@ -190,8 +190,23 @@ impl http_body::Body for Body {
             #[cfg(feature = "hyper")]
             (false, InnerBody::Hyper(inner)) => inner.size_hint(),
             (false, InnerBody::Lazy { .. } | InnerBody::Streaming(_)) => SizeHint::default(),
-            #[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
-            (false, InnerBody::Brotli(_) | InnerBody::Deflate(_) | InnerBody::Gzip(_)) => {
+            // The duplication here is pretty ugly, but I couldn't come up with anything better.
+            #[cfg(feature = "brotli")]
+            (false, InnerBody::Brotli(_)) => {
+                let mut hint = SizeHint::default();
+                hint.set_lower(1);
+                hint.set_upper(self.full_size + 256);
+                hint
+            }
+            #[cfg(feature = "deflate")]
+            (false, InnerBody::Deflate(_)) => {
+                let mut hint = SizeHint::default();
+                hint.set_lower(1);
+                hint.set_upper(self.full_size + 256);
+                hint
+            }
+            #[cfg(feature = "gzip")]
+            (false, InnerBody::Gzip(_)) => {
                 let mut hint = SizeHint::default();
                 hint.set_lower(1);
                 hint.set_upper(self.full_size + 256);
@@ -267,16 +282,7 @@ impl EncodeResponse for Response<Body> {
                 *enc = new;
                 return self;
             }
-            Body {
-                inner:
-                    InnerBody::Brotli(_)
-                    | InnerBody::Deflate(_)
-                    | InnerBody::Gzip(_)
-                    | InnerBody::Hyper(_)
-                    | InnerBody::Lazy { .. }
-                    | InnerBody::Streaming(_),
-                ..
-            } => return self,
+            Body { .. } => return self,
         };
 
         let len = buf.len();
