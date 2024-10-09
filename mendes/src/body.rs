@@ -8,10 +8,10 @@ use std::{io, mem, str};
 
 #[cfg(feature = "brotli")]
 use async_compression::tokio::bufread::BrotliEncoder;
-#[cfg(feature = "deflate")]
-use async_compression::tokio::bufread::DeflateEncoder;
 #[cfg(feature = "gzip")]
 use async_compression::tokio::bufread::GzipEncoder;
+#[cfg(feature = "deflate")]
+use async_compression::tokio::bufread::ZlibEncoder;
 use bytes::{Buf, Bytes, BytesMut};
 #[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
 use http::header::{ACCEPT_ENCODING, CONTENT_ENCODING};
@@ -310,7 +310,7 @@ enum InnerBody {
     #[cfg(feature = "brotli")]
     Brotli(#[pin] BrotliEncoder<BufReader>),
     #[cfg(feature = "deflate")]
-    Deflate(#[pin] DeflateEncoder<BufReader>),
+    Deflate(#[pin] ZlibEncoder<BufReader>),
     #[cfg(feature = "gzip")]
     Gzip(#[pin] GzipEncoder<BufReader>),
     Bytes(#[pin] Bytes),
@@ -329,7 +329,7 @@ impl InnerBody {
             #[cfg(feature = "brotli")]
             Encoding::Brotli => Self::Brotli(BrotliEncoder::new(BufReader { buf })),
             #[cfg(feature = "deflate")]
-            Encoding::Deflate => Self::Deflate(DeflateEncoder::new(BufReader { buf })),
+            Encoding::Deflate => Self::Deflate(ZlibEncoder::new(BufReader { buf })),
             #[cfg(feature = "gzip")]
             Encoding::Gzip => Self::Gzip(GzipEncoder::new(BufReader { buf })),
             Encoding::Identity => Self::Bytes(buf),
