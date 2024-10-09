@@ -1,4 +1,4 @@
-#![cfg(all(feature = "application", feature = "hyper"))]
+#![cfg(all(feature = "application", feature = "hyper", feature = "body-util"))]
 
 use async_trait::async_trait;
 use bytes::Bytes;
