@@ -10,21 +10,21 @@ use std::{io, mem, str};
 use async_compression::tokio::bufread::BrotliEncoder;
 #[cfg(feature = "gzip")]
 use async_compression::tokio::bufread::GzipEncoder;
-#[cfg(feature = "deflate")]
+#[cfg(feature = "zlib")]
 use async_compression::tokio::bufread::ZlibEncoder;
 use bytes::{Buf, Bytes, BytesMut};
-#[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
+#[cfg(any(feature = "brotli", feature = "gzip", feature = "zlib"))]
 use http::header::{ACCEPT_ENCODING, CONTENT_ENCODING};
 use http::request::Parts;
-#[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
+#[cfg(any(feature = "brotli", feature = "gzip", feature = "zlib"))]
 use http::HeaderMap;
-#[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
+#[cfg(any(feature = "brotli", feature = "gzip", feature = "zlib"))]
 use http::{request, HeaderValue, Response};
 use http_body::{Frame, SizeHint};
 use pin_project::pin_project;
-#[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
+#[cfg(any(feature = "brotli", feature = "gzip", feature = "zlib"))]
 use tokio::io::{AsyncBufRead, AsyncRead, ReadBuf};
-#[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
+#[cfg(any(feature = "brotli", feature = "gzip", feature = "zlib"))]
 use tokio_util::io::poll_read_buf;
 
 use crate::application::{Application, FromContext, PathState};
@@ -101,10 +101,10 @@ impl http_body::Body for Body {
         let result = match this.inner.project() {
             #[cfg(feature = "brotli")]
             PinnedBody::Brotli(encoder) => poll_read_buf(encoder, cx, &mut buf),
-            #[cfg(feature = "deflate")]
-            PinnedBody::Deflate(encoder) => poll_read_buf(encoder, cx, &mut buf),
             #[cfg(feature = "gzip")]
             PinnedBody::Gzip(encoder) => poll_read_buf(encoder, cx, &mut buf),
+            #[cfg(feature = "zlib")]
+            PinnedBody::Zlib(encoder) => poll_read_buf(encoder, cx, &mut buf),
             PinnedBody::Bytes(bytes) => {
                 *this.done = true;
                 let bytes = mem::take(bytes.get_mut());
@@ -144,10 +144,10 @@ impl http_body::Body for Body {
                 match &mut inner {
                     #[cfg(feature = "brotli")]
                     InnerBody::Brotli(encoder) => poll_read_buf(Pin::new(encoder), cx, &mut buf),
-                    #[cfg(feature = "deflate")]
-                    InnerBody::Deflate(encoder) => poll_read_buf(Pin::new(encoder), cx, &mut buf),
                     #[cfg(feature = "gzip")]
                     InnerBody::Gzip(encoder) => poll_read_buf(Pin::new(encoder), cx, &mut buf),
+                    #[cfg(feature = "zlib")]
+                    InnerBody::Zlib(encoder) => poll_read_buf(Pin::new(encoder), cx, &mut buf),
                     InnerBody::Bytes(bytes) => {
                         *this.done = true;
                         let bytes = mem::take(bytes);
@@ -165,7 +165,7 @@ impl http_body::Body for Body {
             }
         };
 
-        #[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
+        #[cfg(any(feature = "brotli", feature = "gzip", feature = "zlib"))]
         match ready!(result) {
             Ok(0) => {
                 *this.done = true;
@@ -198,15 +198,15 @@ impl http_body::Body for Body {
                 hint.set_upper(self.full_size + 256);
                 hint
             }
-            #[cfg(feature = "deflate")]
-            (false, InnerBody::Deflate(_)) => {
+            #[cfg(feature = "gzip")]
+            (false, InnerBody::Gzip(_)) => {
                 let mut hint = SizeHint::default();
                 hint.set_lower(1);
                 hint.set_upper(self.full_size + 256);
                 hint
             }
-            #[cfg(feature = "gzip")]
-            (false, InnerBody::Gzip(_)) => {
+            #[cfg(feature = "zlib")]
+            (false, InnerBody::Zlib(_)) => {
                 let mut hint = SizeHint::default();
                 hint.set_lower(1);
                 hint.set_upper(self.full_size + 256);
@@ -261,7 +261,7 @@ impl Default for Body {
     }
 }
 
-#[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
+#[cfg(any(feature = "brotli", feature = "gzip", feature = "zlib"))]
 impl EncodeResponse for Response<Body> {
     fn encoded(mut self, req: &request::Parts) -> Response<Body> {
         let buf = match self.body_mut() {
@@ -300,7 +300,7 @@ impl EncodeResponse for Response<Body> {
     }
 }
 
-#[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
+#[cfg(any(feature = "brotli", feature = "gzip", feature = "zlib"))]
 pub trait EncodeResponse {
     fn encoded(self, req: &request::Parts) -> Self;
 }
@@ -309,10 +309,10 @@ pub trait EncodeResponse {
 enum InnerBody {
     #[cfg(feature = "brotli")]
     Brotli(#[pin] BrotliEncoder<BufReader>),
-    #[cfg(feature = "deflate")]
-    Deflate(#[pin] ZlibEncoder<BufReader>),
     #[cfg(feature = "gzip")]
     Gzip(#[pin] GzipEncoder<BufReader>),
+    #[cfg(feature = "zlib")]
+    Zlib(#[pin] ZlibEncoder<BufReader>),
     Bytes(#[pin] Bytes),
     #[cfg(feature = "hyper")]
     Hyper(#[pin] hyper::body::Incoming),
@@ -328,21 +328,21 @@ impl InnerBody {
         match encoding {
             #[cfg(feature = "brotli")]
             Encoding::Brotli => Self::Brotli(BrotliEncoder::new(BufReader { buf })),
-            #[cfg(feature = "deflate")]
-            Encoding::Deflate => Self::Deflate(ZlibEncoder::new(BufReader { buf })),
             #[cfg(feature = "gzip")]
             Encoding::Gzip => Self::Gzip(GzipEncoder::new(BufReader { buf })),
+            #[cfg(feature = "zlib")]
+            Encoding::Zlib => Self::Zlib(ZlibEncoder::new(BufReader { buf })),
             Encoding::Identity => Self::Bytes(buf),
         }
     }
 }
 
-#[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
+#[cfg(any(feature = "brotli", feature = "gzip", feature = "zlib"))]
 struct BufReader {
     pub(crate) buf: Bytes,
 }
 
-#[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
+#[cfg(any(feature = "brotli", feature = "gzip", feature = "zlib"))]
 impl AsyncBufRead for BufReader {
     fn poll_fill_buf(
         self: Pin<&mut Self>,
@@ -356,7 +356,7 @@ impl AsyncBufRead for BufReader {
     }
 }
 
-#[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
+#[cfg(any(feature = "brotli", feature = "gzip", feature = "zlib"))]
 impl AsyncRead for BufReader {
     fn poll_read(
         self: Pin<&mut Self>,
@@ -375,15 +375,15 @@ impl AsyncRead for BufReader {
 enum Encoding {
     #[cfg(feature = "brotli")]
     Brotli,
-    #[cfg(feature = "deflate")]
-    Deflate,
     #[cfg(feature = "gzip")]
     Gzip,
+    #[cfg(feature = "zlib")]
+    Zlib,
     Identity,
 }
 
 impl Encoding {
-    #[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
+    #[cfg(any(feature = "brotli", feature = "gzip", feature = "zlib"))]
     fn from_accept(headers: &HeaderMap) -> Option<Self> {
         let accept = match headers.get(ACCEPT_ENCODING).map(|hv| hv.to_str()) {
             Some(Ok(accept)) => accept,
@@ -422,16 +422,17 @@ impl Encoding {
 }
 
 impl Encoding {
-    #[cfg(any(feature = "brotli", feature = "deflate", feature = "gzip"))]
+    #[cfg(any(feature = "brotli", feature = "gzip", feature = "zlib"))]
     pub fn as_str(self) -> Option<&'static str> {
         match self {
             #[cfg(feature = "brotli")]
             Self::Brotli => Some("br"),
-            #[cfg(feature = "deflate")]
-            Self::Deflate => Some("deflate"),
             #[cfg(feature = "gzip")]
             Self::Gzip => Some("gzip"),
             Self::Identity => None,
+            // The `deflate` encoding is actually zlib, but the HTTP standard calls it `deflate`.
+            #[cfg(feature = "zlib")]
+            Self::Zlib => Some("deflate"),
         }
     }
 }
@@ -443,11 +444,11 @@ impl FromStr for Encoding {
         Ok(match s {
             #[cfg(feature = "brotli")]
             "br" => Encoding::Brotli,
-            #[cfg(feature = "deflate")]
-            "deflate" => Encoding::Deflate,
             #[cfg(feature = "gzip")]
             "gzip" => Encoding::Gzip,
             "identity" => Encoding::Identity,
+            #[cfg(feature = "zlib")]
+            "deflate" => Encoding::Zlib,
             _ => return Err(()),
         })
     }

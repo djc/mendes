@@ -2,12 +2,12 @@
 
 use std::sync::Arc;
 
-#[cfg(all(feature = "compression", feature = "deflate"))]
+#[cfg(all(feature = "compression", feature = "zlib"))]
 use async_compression::tokio::write::ZlibDecoder;
 use async_trait::async_trait;
 use http::header::{ACCEPT_ENCODING, CONTENT_TYPE};
 use http_body_util::BodyExt;
-#[cfg(all(feature = "compression", feature = "deflate"))]
+#[cfg(all(feature = "compression", feature = "zlib"))]
 use tokio::io::AsyncWriteExt;
 
 use mendes::application::IntoResponse;
@@ -26,7 +26,7 @@ async fn test_json_decode() {
     assert_eq!(String::from_utf8_lossy(&body), "6");
 }
 
-#[cfg(all(feature = "compression", feature = "deflate"))]
+#[cfg(all(feature = "compression", feature = "zlib"))]
 #[tokio::test]
 async fn test_deflate_compression() {
     let rsp = handle(path_request("/echo", "hello world", Some("deflate"))).await;
