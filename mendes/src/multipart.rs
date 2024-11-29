@@ -57,7 +57,7 @@ pub struct Deserializer<'de> {
     state: Option<(State, Part<'de>)>,
 }
 
-impl<'de, 'a> serde::de::Deserializer<'de> for &'a mut Deserializer<'de> {
+impl<'de> serde::de::Deserializer<'de> for &mut Deserializer<'de> {
     type Error = Error;
 
     fn deserialize_any<V>(self, _: V) -> Result<V::Value>
@@ -293,7 +293,7 @@ impl<'de, 'a> serde::de::Deserializer<'de> for &'a mut Deserializer<'de> {
 // Note that we have maps at two levels: the top level as well as the fields
 // inside a `File` object (`Part::Blob` variant). This is especially relevant
 // when deciding to return `Ok(None)` from `next_key_seed()`.
-impl<'de, 'a> MapAccess<'de> for &'a mut Deserializer<'de> {
+impl<'de> MapAccess<'de> for &mut Deserializer<'de> {
     type Error = Error;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>>
@@ -359,7 +359,7 @@ struct Enum<'a, 'de: 'a> {
     de: &'a mut Deserializer<'de>,
 }
 
-impl<'de, 'a> EnumAccess<'de> for Enum<'a, 'de> {
+impl<'de> EnumAccess<'de> for Enum<'_, 'de> {
     type Error = Error;
     type Variant = Self;
 
@@ -371,7 +371,7 @@ impl<'de, 'a> EnumAccess<'de> for Enum<'a, 'de> {
     }
 }
 
-impl<'de, 'a> VariantAccess<'de> for Enum<'a, 'de> {
+impl<'de> VariantAccess<'de> for Enum<'_, 'de> {
     type Error = Error;
 
     fn unit_variant(self) -> Result<()> {
