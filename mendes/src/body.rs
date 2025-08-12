@@ -308,7 +308,7 @@ pub trait EncodeResponse {
 #[pin_project(project = PinnedBody)]
 enum InnerBody {
     #[cfg(feature = "brotli")]
-    Brotli(#[pin] BrotliEncoder<BufReader>),
+    Brotli(#[pin] Box<BrotliEncoder<BufReader>>),
     #[cfg(feature = "gzip")]
     Gzip(#[pin] GzipEncoder<BufReader>),
     #[cfg(feature = "zlib")]
@@ -327,7 +327,7 @@ impl InnerBody {
     fn wrap(buf: Bytes, encoding: Encoding) -> Self {
         match encoding {
             #[cfg(feature = "brotli")]
-            Encoding::Brotli => Self::Brotli(BrotliEncoder::new(BufReader { buf })),
+            Encoding::Brotli => Self::Brotli(Box::new(BrotliEncoder::new(BufReader { buf }))),
             #[cfg(feature = "gzip")]
             Encoding::Gzip => Self::Gzip(GzipEncoder::new(BufReader { buf })),
             #[cfg(feature = "zlib")]
