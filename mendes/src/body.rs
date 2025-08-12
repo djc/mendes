@@ -117,7 +117,7 @@ impl http_body::Body for Body {
             PinnedBody::Hyper(mut inner) => {
                 return Poll::Ready(match ready!(inner.as_mut().poll_frame(cx)) {
                     Some(Ok(frame)) => Some(Ok(frame)),
-                    Some(Err(error)) => Some(Err(io::Error::new(io::ErrorKind::Other, error))),
+                    Some(Err(error)) => Some(Err(io::Error::other(error))),
                     None => {
                         *this.done = true;
                         None
