@@ -1,7 +1,9 @@
+use std::any::Any;
 use std::convert::Infallible;
 use std::error::Error as StdError;
 use std::future::{pending, Future, Pending};
 use std::io;
+use std::marker::Send;
 use std::net::SocketAddr;
 use std::panic::AssertUnwindSafe;
 use std::pin::{pin, Pin};
@@ -255,11 +257,11 @@ where
 
 type UnwindSafeHandlerFuture<T, E> = Map<
     CatchUnwind<AssertUnwindSafe<Pin<Box<dyn Future<Output = T> + Send>>>>,
-    fn(Result<T, Box<(dyn std::any::Any + std::marker::Send + 'static)>>) -> Result<T, E>,
+    fn(Result<T, Box<dyn Any + Send + 'static>>) -> Result<T, E>,
 >;
 
 fn panic_response<B: From<&'static str>>(
-    result: Result<Response<B>, Box<dyn std::any::Any + std::marker::Send + 'static>>,
+    result: Result<Response<B>, Box<dyn Any + Send + 'static>>,
 ) -> Result<Response<B>, Infallible> {
     #[allow(unused_variables)] // Depends on features
     let error = match result {
