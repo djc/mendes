@@ -543,12 +543,8 @@ impl PathState {
     // This should only be used by procedural routing macros.
     #[doc(hidden)]
     pub fn next<'r>(&mut self, path: &'r str) -> Option<&'r str> {
-        let start = match self.next.as_ref() {
-            Some(v) => *v,
-            None => return None,
-        };
-
-        let path = &path[start..];
+        let start = self.next.as_ref()?;
+        let path = &path[*start..];
         if path.is_empty() {
             self.prev = self.next.take();
             return None;
