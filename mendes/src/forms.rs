@@ -384,7 +384,7 @@ pub struct Select {
 
 impl fmt::Display for Select {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(fmt, r#"<select name="{}">"#, &self.name)?;
+        write!(fmt, r#"<select name="{}">"#, self.name)?;
         for opt in &self.options {
             write!(fmt, "{opt}")?;
         }
